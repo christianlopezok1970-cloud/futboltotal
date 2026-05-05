@@ -107,3 +107,58 @@ st.sidebar.write(f"👤 Jugador: **{u_nombre}**")
 st.sidebar.write(f"💰 Fondos: **€ {presupuesto_actual:,.0f}**")
 
 st.write(f"### 🏟️ Oficina de {u_nombre}")
+
+# --- PASO 5: EL MERCADO (Búsqueda y Compra) ---
+
+st.divider()
+st.header("🛒 Mercado de Jugadores")
+
+# Cargamos los datos del Excel
+df_mercado = cargar_excel()
+
+# 1. Filtramos para NO mostrar jugadores que ya fueron comprados por alguien
+# Consultamos los nombres de los jugadores que ya están en la tabla 'plantillas'
+jugadores_ocupados = [j[0] for j in consulta_db("SELECT nombre_jugador FROM plantillas")]
+
+# Creamos un listado de jugadores disponibles (los que no están en la lista de ocupados)
+df_disponibles = df_mercado[~df_mercado['Nombre'].isin(jugadores_ocupados)]
+
+# 2. Buscador de Jugadores
+if not df_disponibles.empty:
+    seleccion = st.selectbox("Busca un jugador para fichar:", [""] + df_disponibles['Nombre'].tolist())
+    
+    if seleccion != "":
+        # Extraemos la fila del jugador elegido
+        datos_jugador = df_disponibles[df_disponibles['Nombre'] == seleccion].iloc[0]
+        
+        nombre_j = datos_jugador['Nombre']
+        equipo_j = datos_jugador['Equipo']
+        posicion_j = datos_jugador['POS']
+        precio_j = datos_jugador['PrecioLimpio']
+        
+        st.info(f"**Ficha Técnica:** {nombre_j} | {equipo_j} | {posicion_j}")
+        st.write(f"💰 **Precio de salida:** € {precio_j:,.0f}")
+        
+        # 3. Lógica de Compra
+        if st.button(f"Confirmar Fichaje de {nombre_j}"):
+            if presupuesto_actual >= precio_j:
+                try:
+                    # A. Restamos el dinero al usuario en la DB
+                    consulta_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", 
+                                (precio_j, u_id), commit=True)
+                    
+                    # B. Insertamos el jugador en la tabla plantillas
+                    consulta_db("""INSERT INTO plantillas (usuario_id, nombre_jugador, equipo, posicion, precio) 
+                                   VALUES (?, ?, ?, ?, ?)""", 
+                                (u_id, nombre_j, equipo_j, posicion_j, precio_j), commit=True)
+                    
+                    st.success(f"¡Fichaje estrella! {nombre_j} se ha unido a tu equipo.")
+                    st.balloons()
+                    st.rerun() # Recargamos para actualizar el presupuesto en la barra lateral
+                except sqlite3.IntegrityError:
+                    # Esto ocurre si justo alguien lo compró un segundo antes (por el UNIQUE)
+                    st.error("⚠️ ¡Llegaste tarde! Otro usuario acaba de fichar a este jugador.")
+            else:
+                st.error("❌ No tienes fondos suficientes para esta operación.")
+else:
+    st.write("No hay más jugadores disponibles en el mercado.")
