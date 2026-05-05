@@ -40,7 +40,7 @@ def generar_ficha_jugador(lista, indice):
     """Genera el HTML de la ficha del jugador o un espacio vacío"""
     if indice < len(lista):
         nombre = lista[indice]
-        # Limpiamos el nombre para que no sea tan largo (ej: "Carrillo, Guido" -> "Carrillo")
+        # Limpiamos el nombre para visualización
         apellido = nombre.split(',')[0] if ',' in nombre else nombre.split(' ')[0]
         return f'''
         <div style="text-align: center; width: 85px;">
@@ -78,13 +78,12 @@ with st.sidebar:
     password = st.text_input("Contraseña:", type="password").strip()
 
 if not manager or not password:
-    st.info("👋 Bienvenido. Ingresa tus credenciales para gestionar tu equipo.")
+    st.info("👋 Bienvenido. Ingresa tus credenciales.")
     st.stop()
 
 datos = ejecutar_db("SELECT id, presupuesto, prestigio, password FROM usuarios WHERE nombre = ?", (manager,))
 if not datos:
     ejecutar_db("INSERT INTO usuarios (nombre, password, presupuesto, prestigio) VALUES (?, ?, 2500000, 15)", (manager, password), commit=True)
-    st.success("¡Cuenta creada exitosamente!")
     st.rerun()
 u_id, presupuesto, prestigio, u_pass = datos[0]
 if password != u_pass:
@@ -108,72 +107,63 @@ with st.expander("🔍 BUSCAR Y FICHAR JUGADORES"):
             if st.button("CONFIRMAR FICHAJE"):
                 ya_fichado = ejecutar_db("SELECT id FROM cartera WHERE usuario_id = ? AND nombre_jugador = ?", (u_id, nom))
                 if ya_fichado:
-                    st.warning("Este jugador ya forma parte de tu plantel.")
+                    st.warning("Ya tienes a este jugador.")
                 elif presupuesto >= costo:
                     ejecutar_db("INSERT INTO cartera (usuario_id, nombre_jugador, club, posicion) VALUES (?,?,?,?)", (u_id, nom, club, pos), commit=True)
                     ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (costo, u_id), commit=True)
-                    st.success(f"¡Fichaje estrella! {nom} se une al equipo.")
                     st.rerun()
                 else:
-                    st.error("No tienes dinero suficiente para este fichaje.")
+                    st.error("Saldo insuficiente.")
 
-# --- 6. CAMPO TÁCTICO (Visualización 4-2-3-1) ---
+# --- 6. CAMPO TÁCTICO (4-2-3-1 corregido) ---
 st.subheader("🏟️ Alineación Titular")
 
 cartera_raw = ejecutar_db("SELECT nombre_jugador, posicion FROM cartera WHERE usuario_id = ?", (u_id,))
 equipo = {"ARQ": [], "DEF": [], "MED": [], "DEL": []}
 
-# Clasificación inteligente de posiciones según tu Excel
 for n, p in cartera_raw:
     if p:
         p_up = p.upper()
-        if any(x in p_up for x in ["ARQ", "POR", "GK", "Arquero"]): equipo["ARQ"].append(n)
-        elif any(x in p_up for x in ["DEF", "DFC", "LAT", "DFI", "DFD", "Defensa"]): equipo["DEF"].append(n)
-        elif any(x in p_up for x in ["MED", "MC", "VOL", "MCD", "MCO", "Medio"]): equipo["MED"].append(n)
-        elif any(x in p_up for x in ["DEL", "EXT", "DC", "ATA", "Delantero"]): equipo["DEL"].append(n)
+        if any(x in p_up for x in ["ARQ", "POR", "GK", "ARQUERO"]): equipo["ARQ"].append(n)
+        elif any(x in p_up for x in ["DEF", "DFC", "LAT", "DFI", "DFD", "DEFENSA"]): equipo["DEF"].append(n)
+        elif any(x in p_up for x in ["MED", "MC", "VOL", "MCD", "MCO", "MEDIO"]): equipo["MED"].append(n)
+        elif any(x in p_up for x in ["DEL", "EXT", "DC", "ATA", "DELANTERO"]): equipo["DEL"].append(n)
 
-# Construcción de la cancha
+# Estructura de la cancha en HTML
 html_cancha = f"""
 <div class="campo-tactico">
-    <!-- DELANTERO -->
     <div style="display: flex; justify-content: center; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["DEL"], 0)}
     </div>
-    <!-- MEDIOS ATAQUE -->
     <div style="display: flex; justify-content: space-around; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["MED"], 0)}
         {generar_ficha_jugador(equipo["MED"], 1)}
         {generar_ficha_jugador(equipo["MED"], 2)}
     </div>
-    <!-- MEDIOS DEFENSA -->
     <div style="display: flex; justify-content: center; gap: 100px; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["MED"], 3)}
         {generar_ficha_jugador(equipo["MED"], 4)}
     </div>
-    <!-- DEFENSA -->
     <div style="display: flex; justify-content: space-around; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["DEF"], 0)}
         {generar_ficha_jugador(equipo["DEF"], 1)}
         {generar_ficha_jugador(equipo["DEF"], 2)}
         {generar_ficha_jugador(equipo["DEF"], 3)}
     </div>
-    <!-- ARQUERO -->
     <div style="display: flex; justify-content: center;">
         {generar_ficha_jugador(equipo["ARQ"], 0)}
     </div>
 </div>
 """
+# Renderizado final con soporte de HTML activo
 st.markdown(html_cancha, unsafe_allow_html=True)
 
 # --- 7. GESTIÓN DE PLANTEL ---
-with st.expander("📋 VER PLANTEL COMPLETO / VENDER JUGADORES"):
+with st.expander("📋 VER PLANTEL / VENDER JUGADORES"):
     cartera_v = ejecutar_db("SELECT id, nombre_jugador, club, posicion FROM cartera WHERE usuario_id = ?", (u_id,))
-    if not cartera_v:
-        st.write("Tu plantilla está vacía. ¡Ve al mercado!")
     for c_id, n, cl, p in cartera_v:
         col1, col2 = st.columns([4, 1])
         col1.write(f"🏃 **{n}** ({p}) - {cl}")
         if col2.button("Desvincular", key=f"v_{c_id}"):
-            # Al vender, podrías devolver dinero, pero por ahora solo borra
             ejecutar_db("DELETE FROM cartera WHERE id = ?", (c_id,), commit=True)
             st.rerun()
