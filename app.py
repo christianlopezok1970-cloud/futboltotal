@@ -162,91 +162,142 @@ if not df_disponibles.empty:
 else:
     st.info("No hay jugadores disponibles.")
 
-# --- PASO 6: MI PLANTILLA Y LA CANCHA ---
+
+# --- PASO 6: MI PLANTILLA Y CANCHA PRO (1-4-4-2) ---
 
 st.divider()
-st.header("🏃 Tu Plantilla")
+st.header("🏟️ Tu Alineación Titular")
 
-# 1. Consultamos los jugadores que pertenecen a este usuario
-mis_jugadores = consulta_db("""SELECT id, nombre_jugador, posicion, estado, precio 
-                               FROM plantillas WHERE usuario_id = ?""", (u_id,))
+# 1. Obtener datos actualizados
+mis_jugadores = consulta_db("SELECT id, nombre_jugador, posicion, estado, precio FROM plantillas WHERE usuario_id = ?", (u_id,))
+titulares = [j for j in mis_jugadores if j[3] == "Titular"]
+
+# Estilos para la cancha y las fichas
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; }
+    .cancha-container {
+        background: linear-gradient(to bottom, #1b5e20 0%, #2e7d32 100%);
+        border: 4px solid #ffffff33;
+        border-radius: 20px;
+        padding: 40px 10px;
+        position: relative;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    .ficha-player {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .circulo {
+        width: 60px; height: 60px;
+        background: white;
+        border-radius: 50%;
+        border: 3px solid #00d4ff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    .nombre-player {
+        background: rgba(0,0,0,0.7);
+        color: white;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        margin-top: 5px;
+        font-weight: bold;
+        text-align: center;
+        width: 90px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Función para renderizar la ficha de un jugador en la cancha
+def ficha_html(lista, index):
+    if index < len(lista):
+        nombre = lista[index][1].split(' ')[0] # Primer nombre
+        return f'''
+        <div class="ficha-player">
+            <div class="circulo">⚽</div>
+            <div class="nombre-player">{nombre}</div>
+        </div>
+        '''
+    return '<div class="ficha-player" style="opacity:0.2"><div class="circulo"></div></div>'
+
+# Clasificación por líneas
+def filtrar_pos(lista, terminos):
+    return [j for j in lista if any(t in j[2].upper() for t in terminos)]
+
+dels = filtrar_pos(titulares, ["DEL", "ATA", "DC", "EXT"])
+meds = filtrar_pos(titulares, ["MED", "VOL", "MC", "MCO", "MCD"])
+defs = filtrar_pos(titulares, ["DEF", "DFC", "LAT", "LI", "LD"])
+arqs = filtrar_pos(titulares, ["ARQ", "POR", "GK"])
+
+# --- DIBUJO DE LA CANCHA ---
+with st.container():
+    st.markdown('<div class="cancha-container">', unsafe_allow_html=True)
+    
+    # Delanteros (2)
+    c1, c2 = st.columns(2)
+    with c1: st.markdown(ficha_html(dels, 0), unsafe_allow_html=True)
+    with c2: st.markdown(ficha_html(dels, 1), unsafe_allow_html=True)
+    
+    st.write("<br>", unsafe_allow_html=True)
+    
+    # Mediocampo (4)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.markdown(ficha_html(meds, 0), unsafe_allow_html=True)
+    with c2: st.markdown(ficha_html(meds, 1), unsafe_allow_html=True)
+    with c3: st.markdown(ficha_html(meds, 2), unsafe_allow_html=True)
+    with c4: st.markdown(ficha_html(meds, 3), unsafe_allow_html=True)
+
+    st.write("<br>", unsafe_allow_html=True)
+
+    # Defensa (4)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.markdown(ficha_html(defs, 0), unsafe_allow_html=True)
+    with c2: st.markdown(ficha_html(defs, 1), unsafe_allow_html=True)
+    with c3: st.markdown(ficha_html(defs, 2), unsafe_allow_html=True)
+    with c4: st.markdown(ficha_html(defs, 3), unsafe_allow_html=True)
+
+    st.write("<br>", unsafe_allow_html=True)
+
+    # Arquero (1)
+    col_arq = st.columns([1, 1, 1]) # Para centrar al arquero
+    with col_arq[1]: st.markdown(ficha_html(arqs, 0), unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --- GESTIÓN DE PLANTILLA (SENTAR Y VENDER) ---
+st.divider()
+st.header("📋 Gestión de Jugadores")
 
 if not mis_jugadores:
-    st.info("Aún no tienes jugadores. ¡Ve al mercado y ficha tu primera estrella!")
+    st.info("No tienes jugadores.")
 else:
-    # Mostramos una tabla simple o tarjetas para gestionar
     for j_id, nom, pos, est, precio in mis_jugadores:
-        col_nom, col_est, col_acc = st.columns([3, 2, 2])
+        c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
+        c1.write(f"**{nom}** ({pos})")
+        c2.write(f"€ {precio:,.0f}")
         
-        col_nom.write(f"**{nom}** ({pos})")
-        col_est.write(f"Estado: {est}")
-        
-        # Botón para cambiar entre Titular y Suplente
-        btn_label = "Sentar" if est == "Titular" else "Poner Titular"
-        if col_acc.button(btn_label, key=f"tito_{j_id}"):
-            nuevo_estado = "Suplente" if est == "Titular" else "Titular"
-            consulta_db("UPDATE plantillas SET estado = ? WHERE id = ?", (nuevo_estado, j_id), commit=True)
+        # Botón Titular/Suplente
+        txt_est = "Sentar" if est == "Titular" else "Titular"
+        if c3.button(txt_est, key=f"est_{j_id}"):
+            nuevo = "Suplente" if est == "Titular" else "Titular"
+            consulta_db("UPDATE plantillas SET estado = ? WHERE id = ?", (nuevo, j_id), commit=True)
             st.rerun()
-
-    # --- DIBUJO DE LA CANCHA ---
-    st.divider()
-    st.header("🏟️ Alineación Titular (1-4-4-2)")
-
-    # Filtramos solo los que marcaste como Titulares
-    titulares = [j for j in mis_jugadores if j[3] == "Titular"]
-
-    # Función para organizar jugadores por línea
-    def obtener_por_linea(lista, terminos):
-        return [j[1] for j in lista if any(t in j[2].upper() for t in terminos)]
-
-    # Clasificamos según el texto de la columna POS
-    arqs = obtener_por_linea(titulares, ["ARQ", "POR", "GK"])
-    defs = obtener_por_linea(titulares, ["DEF", "DFC", "LAT", "LI", "LD"])
-    meds = obtener_por_linea(titulares, ["MED", "VOL", "MC", "MCO", "MCD"])
-    dels = obtener_por_linea(titulares, ["DEL", "ATA", "DC", "EXT"])
-
-    # Estilo visual de la cancha
-    st.markdown("""
-    <style>
-        .campo {
-            background-color: #2e7d32;
-            border: 3px solid white;
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            color: white;
-        }
-        .linea-cancha { margin-bottom: 20px; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    with st.container():
-        st.markdown('<div class="campo">', unsafe_allow_html=True)
-        
-        # Delanteros (2)
-        st.write("⚽ DELANTEROS")
-        c1, c2 = st.columns(2)
-        c1.write(dels[0] if len(dels) > 0 else "---")
-        c2.write(dels[1] if len(dels) > 1 else "---")
-        
-        # Mediocampo (4)
-        st.write("🏃 MEDIOCAMPO")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.write(meds[0] if len(meds) > 0 else "---")
-        c2.write(meds[1] if len(meds) > 1 else "---")
-        c3.write(meds[2] if len(meds) > 2 else "---")
-        c4.write(meds[3] if len(meds) > 3 else "---")
-        
-        # Defensa (4)
-        st.write("🛡️ DEFENSA")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.write(defs[0] if len(defs) > 0 else "---")
-        c2.write(defs[1] if len(defs) > 1 else "---")
-        c3.write(defs[2] if len(defs) > 2 else "---")
-        c4.write(defs[3] if len(defs) > 3 else "---")
-        
-        # Arquero (1)
-        st.write("🧤 ARQUERO")
-        st.write(arqs[0] if len(arqs) > 0 else "---")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+            
+        # BOTÓN DE VENTA (Recupera el dinero)
+        if c4.button("🗑️", key=f"del_{j_id}", help="Vender jugador"):
+            # 1. Devolver dinero
+            consulta_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (precio, u_id), commit=True)
+            # 2. Eliminar de la plantilla
+            consulta_db("DELETE FROM plantillas WHERE id = ?", (j_id,), commit=True)
+            st.success(f"Vendiste a {nom}")
+            st.rerun()
