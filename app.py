@@ -161,3 +161,92 @@ if not df_disponibles.empty:
                 st.error("No tienes suficiente dinero.")
 else:
     st.info("No hay jugadores disponibles.")
+
+# --- PASO 6: MI PLANTILLA Y LA CANCHA ---
+
+st.divider()
+st.header("🏃 Tu Plantilla")
+
+# 1. Consultamos los jugadores que pertenecen a este usuario
+mis_jugadores = consulta_db("""SELECT id, nombre_jugador, posicion, estado, precio 
+                               FROM plantillas WHERE usuario_id = ?""", (u_id,))
+
+if not mis_jugadores:
+    st.info("Aún no tienes jugadores. ¡Ve al mercado y ficha tu primera estrella!")
+else:
+    # Mostramos una tabla simple o tarjetas para gestionar
+    for j_id, nom, pos, est, precio in mis_jugadores:
+        col_nom, col_est, col_acc = st.columns([3, 2, 2])
+        
+        col_nom.write(f"**{nom}** ({pos})")
+        col_est.write(f"Estado: {est}")
+        
+        # Botón para cambiar entre Titular y Suplente
+        btn_label = "Sentar" if est == "Titular" else "Poner Titular"
+        if col_acc.button(btn_label, key=f"tito_{j_id}"):
+            nuevo_estado = "Suplente" if est == "Titular" else "Titular"
+            consulta_db("UPDATE plantillas SET estado = ? WHERE id = ?", (nuevo_estado, j_id), commit=True)
+            st.rerun()
+
+    # --- DIBUJO DE LA CANCHA ---
+    st.divider()
+    st.header("🏟️ Alineación Titular (1-4-4-2)")
+
+    # Filtramos solo los que marcaste como Titulares
+    titulares = [j for j in mis_jugadores if j[3] == "Titular"]
+
+    # Función para organizar jugadores por línea
+    def obtener_por_linea(lista, terminos):
+        return [j[1] for j in lista if any(t in j[2].upper() for t in terminos)]
+
+    # Clasificamos según el texto de la columna POS
+    arqs = obtener_por_linea(titulares, ["ARQ", "POR", "GK"])
+    defs = obtener_por_linea(titulares, ["DEF", "DFC", "LAT", "LI", "LD"])
+    meds = obtener_por_linea(titulares, ["MED", "VOL", "MC", "MCO", "MCD"])
+    dels = obtener_por_linea(titulares, ["DEL", "ATA", "DC", "EXT"])
+
+    # Estilo visual de la cancha
+    st.markdown("""
+    <style>
+        .campo {
+            background-color: #2e7d32;
+            border: 3px solid white;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            color: white;
+        }
+        .linea-cancha { margin-bottom: 20px; font-weight: bold; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    with st.container():
+        st.markdown('<div class="campo">', unsafe_allow_html=True)
+        
+        # Delanteros (2)
+        st.write("⚽ DELANTEROS")
+        c1, c2 = st.columns(2)
+        c1.write(dels[0] if len(dels) > 0 else "---")
+        c2.write(dels[1] if len(dels) > 1 else "---")
+        
+        # Mediocampo (4)
+        st.write("🏃 MEDIOCAMPO")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.write(meds[0] if len(meds) > 0 else "---")
+        c2.write(meds[1] if len(meds) > 1 else "---")
+        c3.write(meds[2] if len(meds) > 2 else "---")
+        c4.write(meds[3] if len(meds) > 3 else "---")
+        
+        # Defensa (4)
+        st.write("🛡️ DEFENSA")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.write(defs[0] if len(defs) > 0 else "---")
+        c2.write(defs[1] if len(defs) > 1 else "---")
+        c3.write(defs[2] if len(defs) > 2 else "---")
+        c4.write(defs[3] if len(defs) > 3 else "---")
+        
+        # Arquero (1)
+        st.write("🧤 ARQUERO")
+        st.write(arqs[0] if len(arqs) > 0 else "---")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
