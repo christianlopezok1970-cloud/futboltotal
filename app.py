@@ -146,20 +146,49 @@ meds = filtrar(titus, ["MED","VOL","MC","MCO","MCD"])
 defs = filtrar(titus, ["DEF","DFC","LAT","LI","LD"])
 arqs = filtrar(titus, ["ARQ","POR","GK"])
 
-# Renderizado del campo
+# Renderizado del campo (CORREGIDO)
 st.markdown('<div class="cancha-fondo">', unsafe_allow_html=True)
+
+# Delanteros
 c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-with c2: render_ficha(dels, 0)
-with c3: render_ficha(dels, 1)
+with c2: 
+    render_ficha(dels, 0)
+with c3: 
+    render_ficha(dels, 1)
+
 st.write("")
+
+# Medios
 c1, c2, c3, c4 = st.columns(4)
-with c1: render_ficha(meds, 0); with c2: render_ficha(meds, 1); with c3: render_ficha(meds, 2); with c4: render_ficha(meds, 3)
+with c1: 
+    render_ficha(meds, 0)
+with c2: 
+    render_ficha(meds, 1)
+with c3: 
+    render_ficha(meds, 2)
+with c4: 
+    render_ficha(meds, 3)
+
 st.write("")
+
+# Defensas
 c1, c2, c3, c4 = st.columns(4)
-with c1: render_ficha(defs, 0); with c2: render_ficha(defs, 1); with c3: render_ficha(defs, 2); with c4: render_ficha(defs, 3)
+with c1: 
+    render_ficha(defs, 0)
+with c2: 
+    render_ficha(defs, 1)
+with c3: 
+    render_ficha(defs, 2)
+with c4: 
+    render_ficha(defs, 3)
+
 st.write("")
+
+# Arquero
 c1, c2, c3 = st.columns([1, 1, 1])
-with c2: render_ficha(arqs, 0)
+with c2: 
+    render_ficha(arqs, 0)
+
 st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 7. GESTIÓN DE PLANTILLA ---
