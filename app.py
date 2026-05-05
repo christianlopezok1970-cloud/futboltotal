@@ -2,10 +2,11 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import io
+from PIL import Image
 
-# --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
-DB_NAME = 'agencia_global_v41.db'
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQed5yx4ReWBiR2IFct9y1jkLGVF9SIbn3RbzNYYZLJPhhcq_yy0WuTZWd0vVJAZ2kvD_walSrs-J-S/pub?output=csv"
+# --- 1. CONFIGURACIÓN DE BASE DE DATOS MÉDICA ---
+DB_NAME = 'gestion_medica_v1.db'
 
 def ejecutar_db(query, params=(), commit=False):
     with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
@@ -14,377 +15,152 @@ def ejecutar_db(query, params=(), commit=False):
         if commit: conn.commit()
         return c.fetchall()
 
-def formatear_abreviado(monto):
-    try:
-        monto = float(monto)
-        if monto >= 1_000_000: 
-            return f"{monto / 1_000_000:.1f}M".replace('.0M', 'M').replace('.', ',')
-        elif monto >= 1_000: 
-            return f"{monto / 1_000:.0f}K"
-        return f"{monto:.0f}"
-    except: return "0"
+# Creación de tablas profesionales
+ejecutar_db('''CREATE TABLE IF NOT EXISTS pacientes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT,
+                dni TEXT UNIQUE,
+                telefono TEXT,
+                historial_clinico TEXT,
+                fecha_registro TEXT)''', commit=True)
 
-def formatear_total(monto):
-    try: return f"{int(float(monto)):,}".replace(',', '.')
-    except: return "0"
+ejecutar_db('''CREATE TABLE IF NOT EXISTS galerias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paciente_id INTEGER,
+                imagen_data BLOB,
+                descripcion TEXT,
+                fecha TEXT)''', commit=True)
 
-@st.cache_data(ttl=60) # Reducido a 60 para detectar el cierre más rápido
-def cargar_datos_completos_google():
-    try:
-        df = pd.read_csv(SHEET_URL)
-        df.columns = [c.strip() for c in df.columns]
-        def limpiar_valor(val):
-            try:
-                s = str(val).replace('.','').replace(',','')
-                return int(''.join(filter(str.isdigit, s)))
-            except: return 1000000
-        df['ValorNum'] = df.iloc[:, 3].apply(limpiar_valor)
-        df['Display'] = df.iloc[:, 0] + " (" + df.iloc[:, 1] + ") - € " + df['ValorNum'].apply(formatear_abreviado) + " [" + df.iloc[:, 2] + "]"
-        df['ScoreOficial'] = pd.to_numeric(df.iloc[:, 4], errors='coerce').fillna(0)
-        return df
-    except: return pd.DataFrame()
+ejecutar_db('''CREATE TABLE IF NOT EXISTS agenda (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paciente_id INTEGER,
+                fecha TEXT,
+                hora TEXT,
+                motivo TEXT)''', commit=True)
 
-# Tablas
-ejecutar_db('''CREATE TABLE IF NOT EXISTS usuarios 
-             (id INTEGER PRIMARY KEY, nombre TEXT UNIQUE, password TEXT, presupuesto REAL, prestigio INTEGER)''', commit=True)
-ejecutar_db('''CREATE TABLE IF NOT EXISTS cartera 
-             (id INTEGER PRIMARY KEY, usuario_id INTEGER, nombre_jugador TEXT, 
-              porcentaje REAL, costo_compra REAL, club TEXT)''', commit=True)
-ejecutar_db('''CREATE TABLE IF NOT EXISTS historial 
-             (id INTEGER PRIMARY KEY, usuario_id INTEGER, detalle TEXT, monto REAL, fecha TEXT)''', commit=True)
+# --- 2. ESTILO MÉDICO (AZUL PROFUNDO Y BLANCO) ---
+st.set_page_config(page_title="Medical Suite Pro", layout="wide")
 
-# --- 2. LÓGICA DE NEGOCIO ---
-def calcular_balance_fecha(pts, costo):
-    pts = round(float(pts), 1)
-    if pts >= 6.6: return int(costo * ((pts - 6.5) * 10 / 100))
-    elif pts <= 6.3: return int(costo * ((pts - 6.4) * 10 / 100))
-    return 0
-
-def calcular_cambio_prestigio(pts):
-    p = round(float(pts), 1)
-    if p >= 8.0: return 2
-    if p >= 7.0: return 1
-    if p <= 5.9: return -2
-    if p <= 6.7: return -1
-    return 0
-
-# --- ESTILO AZUL CHAMPIONS ---
 st.markdown("""
     <style>
-    /* Fondo principal */
     .stApp {
-        background: linear-gradient(180deg, #001633 0%, #000814 100%);
+        background: linear-gradient(180deg, #002147 0%, #f0f2f6 100%);
     }
-    
-    /* Color de los textos para que resalten */
-    h1, h2, h3, h4, p, span, label {
-        color: #f0f2f6 !important;
+    .main-card {
+        background-color: white;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        color: #333;
+        margin-bottom: 20px;
     }
-
-    /* Estilo para las tarjetas de los jugadores */
-    div[data-testid="stVerticalBlock"] > div[style*="border"] {
-        background-color: rgba(255, 255, 255, 0.05);
-        border: 1px solid #003366 !important;
-        border-radius: 10px;
-    }
-
-    /* Sidebar con un azul un poco más oscuro */
-    section[data-testid="stSidebar"] {
-        background-color: #000b1a;
-    }
-    
-    /* Botones estilo premium */
+    h1, h2, h3 { color: #002147 !important; }
     .stButton>button {
-        background-color: #004494;
+        background-color: #004E98;
         color: white;
-        border-radius: 5px;
-        border: none;
-    }
-    
-    .stButton>button:hover {
-        background-color: #005bc4;
-        border: none;
-        color: white;
+        border-radius: 8px;
+        font-weight: bold;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. INTERFAZ E INICIO DE SESIÓN ---
-st.set_page_config(page_title="Pro Fútbol Manager v40", layout="wide")
-st.subheader("Pro Fútbol Manager")
-
+# --- 3. LÓGICA DE NAVEGACIÓN ---
 with st.sidebar:
-    st.title("🔐 Acceso Agente")
-    manager = st.text_input("Nombre del Agente:").strip()
-    password = st.text_input("Contraseña:", type="password").strip()
+    st.title("🏥 Medical Suite")
+    menu = st.radio("Menú Principal", ["Agenda Hoy", "Pacientes", "Nueva Ficha"])
 
-if not manager or not password:
-    st.info("👋 Por favor, introduce tu nombre y contraseña.")
-    st.stop()
-
-datos = ejecutar_db("SELECT id, presupuesto, prestigio, password FROM usuarios WHERE nombre = ?", (manager,))
-
-if not datos:
-    ejecutar_db("INSERT INTO usuarios (nombre, password, presupuesto, prestigio) VALUES (?, ?, 2000000, 10)", (manager, password), commit=True)
-    st.success(f"Cuenta creada para {manager}. ¡Bienvenido!")
-    st.rerun()
-else:
-    u_id, presupuesto, prestigio, u_pass = datos[0]
-    if password != u_pass:
-        st.error("❌ Contraseña incorrecta.")
-        st.stop()
-
-df_oficial = cargar_datos_completos_google()
-
-# --- LÓGICA DE CIERRE DE MERCADO (SIMPLE Y SEGURA) ---
-mercado_bloqueado = False
-if not df_oficial.empty and len(df_oficial.columns) >= 10:
-    estado_j1 = str(df_oficial.iloc[0, 9]).strip().upper()
-    if "CERRADO" in estado_j1:
-        mercado_bloqueado = True
-
-# --- 4. PROCESAMIENTO AUTOMÁTICO ---
-if not df_oficial.empty:
-    cartera_activa = ejecutar_db("SELECT nombre_jugador, costo_compra FROM cartera WHERE usuario_id = ?", (u_id,))
-    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-    for j_nom, j_costo in cartera_activa:
-        match = df_oficial[df_oficial.iloc[:, 0].str.strip() == j_nom.strip()]
-        if not match.empty:
-            pts_oficial = float(match['ScoreOficial'].values[0])
-            if pts_oficial > 0:
-                check_detalle = f"Auto-Jornada: {j_nom.strip()}"
-                ya_cobrado = ejecutar_db("SELECT id FROM historial WHERE usuario_id = ? AND detalle = ? AND fecha LIKE ?", (u_id, check_detalle, f"{fecha_hoy}%"))
-                if not ya_cobrado:
-                    bal = calcular_balance_fecha(pts_oficial, j_costo)
-                    pres_mod = calcular_cambio_prestigio(pts_oficial)
-                    ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ?, prestigio = prestigio + ? WHERE id = ?", (bal, pres_mod, u_id), commit=True)
-                    ejecutar_db("INSERT INTO historial (usuario_id, detalle, monto, fecha) VALUES (?,?,?,?)", (u_id, check_detalle, bal, datetime.now().strftime("%Y-%m-%d %H:%M")), commit=True)
-                    st.toast(f"✅ Jornada procesada: {j_nom}")
-    
-    datos = ejecutar_db("SELECT id, presupuesto, prestigio, password FROM usuarios WHERE id = ?", (u_id,))
-    u_id, presupuesto, prestigio, _ = datos[0]
-
-# --- 5. SIDEBAR (Métricas + Préstamo) ---
-st.sidebar.metric("Caja Global", f"€ {formatear_total(presupuesto)}")
-st.sidebar.metric("Reputación", f"{prestigio} pts")
-
-with st.sidebar.expander("🏦 Préstamo Bancario"):
-    st.caption("€ 100.000 = -1 de Reputación")
-    monto_p = st.number_input("Monto (€):", min_value=0, step=100000)
-    if st.button("Confirmar Préstamo"):
-        if monto_p >= 100000:
-            costo_rep = int(monto_p / 100000)
-            if prestigio >= costo_rep:
-                ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ?, prestigio = prestigio - ? WHERE id = ?", (monto_p, costo_rep, u_id), commit=True)
-                ejecutar_db("INSERT INTO historial (usuario_id, detalle, monto, fecha) VALUES (?,?,?,?)", (u_id, f"Préstamo (-{costo_rep} Rep)", monto_p, datetime.now().strftime("%Y-%m-%d %H:%M")), commit=True)
-                st.rerun()
-            else:
-                st.error("Reputación insuficiente.")
-
-st.sidebar.divider()
-if not st.sidebar.toggle("🔒 Bloquear Reset", value=True):
-    if st.sidebar.button("RESET TOTAL"):
-        ejecutar_db("DELETE FROM cartera WHERE usuario_id = ?", (u_id,), commit=True)
-        ejecutar_db("DELETE FROM historial WHERE usuario_id = ?", (u_id,), commit=True)
-        ejecutar_db("UPDATE usuarios SET presupuesto = 2000000, prestigio = 10 WHERE id = ?", (u_id,), commit=True)
-        st.rerun()
-
-# --- 6. SCOUTING Y MERCADO ---
-if mercado_bloqueado:
-    st.error("🚨 EL MERCADO ESTÁ ACTUALMENTE CERRADO. No se permiten nuevas contrataciones.")
-else:
-    with st.expander("🔍 Scouting y Mercado"):
-        if not df_oficial.empty:
-            c1, c2 = st.columns(2)
-            seleccion = c1.selectbox("Buscar Jugador:", options=[""] + df_oficial['Display'].tolist())
-            if seleccion:
-                dj = df_oficial[df_oficial['Display'] == seleccion].iloc[0]
-                nom = dj.iloc[0]
+# --- 4. SECCIÓN: NUEVA FICHA (CON FOTOS) ---
+if menu == "Nueva Ficha":
+    st.header("📝 Registro de Paciente")
+    with st.container():
+        st.markdown('<div class="main-card">', unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        nombre = col1.text_input("Nombre Completo")
+        dni = col2.text_input("DNI / Identificación")
+        tel = col1.text_input("Teléfono")
+        notas = st.text_area("Antecedentes y Notas Médicas")
+        
+        st.subheader("📸 Capturas Clínicas (JPG)")
+        archivos_fotos = st.file_uploader("Subir imágenes", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+        
+        if st.button("Guardar Paciente"):
+            if nombre and dni:
+                # Guardar paciente
+                ejecutar_db("INSERT INTO pacientes (nombre, dni, telefono, historial_clinico, fecha_registro) VALUES (?,?,?,?,?)",
+                           (nombre, dni, tel, notas, datetime.now().strftime("%Y-%m-%d")), commit=True)
                 
-                ya_lo_tiene = ejecutar_db("SELECT id FROM cartera WHERE usuario_id = ? AND nombre_jugador = ?", (u_id, nom))
-                if ya_lo_tiene:
-                    st.warning(f"⚠️ Ya representas a {nom}.")
-                else:
-                    v_m_t = int(dj['ValorNum'])
-                    vendido_p = ejecutar_db("SELECT SUM(porcentaje) FROM cartera WHERE nombre_jugador = ?", (nom,))
-                    stock_disponible = 100 - (vendido_p[0][0] if vendido_p[0][0] else 0)
-                    
-                    max_fichaje = min(stock_disponible, int(prestigio))
-                    
-                    if max_fichaje > 0:
-                        opciones_fichaje = [o for o in [1, 5, 10, 25, 50, 75, 100] if o <= max_fichaje]
-                        if not opciones_fichaje or max_fichaje not in opciones_fichaje:
-                            opciones_fichaje.append(max_fichaje)
-                        opciones_fichaje = sorted(list(set(opciones_fichaje)))
+                # Obtener ID del paciente recién creado
+                p_id = ejecutar_db("SELECT id FROM pacientes WHERE dni = ?", (dni,))[0][0]
+                
+                # Guardar fotos
+                for archivo in archivos_fotos:
+                    blob_data = archivo.read()
+                    ejecutar_db("INSERT INTO galerias (paciente_id, imagen_data, descripcion, fecha) VALUES (?,?,?,?)",
+                               (p_id, blob_data, "Captura inicial", datetime.now().strftime("%Y-%m-%d")), commit=True)
+                
+                st.success(f"Ficha de {nombre} creada con éxito.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-                        pct = c2.select_slider("Porcentaje a adquirir:", opciones_fichaje)
-                        costo_f = (v_m_t * pct) / 100
-                        inv_total = costo_f + (v_m_t * 0.02)
-                        
-                        st.info(f"Ficha: € {formatear_total(costo_f)} | Gastos Admin (2%): € {formatear_total(v_m_t * 0.02)}")
-                        if st.button("FICHAR JUGADOR", type="primary"):
-                            if presupuesto >= inv_total:
-                                ejecutar_db("INSERT INTO cartera (usuario_id, nombre_jugador, porcentaje, costo_compra, club) VALUES (?,?,?,?,?)", (u_id, nom, pct, costo_f, dj.iloc[1]), commit=True)
-                                ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (inv_total, u_id), commit=True)
-                                ejecutar_db("INSERT INTO historial (usuario_id, detalle, monto, fecha) VALUES (?,?,?,?)", (u_id, f"Compra {pct}% {nom}", -inv_total, datetime.now().strftime("%Y-%m-%d %H:%M")), commit=True)
-                                st.rerun()
-                    else:
-                        st.error("Reputación insuficiente.")
-
-# --- 7. MIS REPRESENTADOS ---
-st.markdown("### 📋 Mis Representados")
-cartera = ejecutar_db("SELECT id, nombre_jugador, porcentaje, costo_compra, club FROM cartera WHERE usuario_id = ?", (u_id,))
-for j_id, j_nom, j_pct, j_costo, j_club in cartera:
-    info = df_oficial[df_oficial.iloc[:, 0].str.strip() == j_nom.strip()]
-    score = info['ScoreOficial'].values[0] if not info.empty else 0
+# --- 5. SECCIÓN: AGENDA VISUAL SIMPLE ---
+elif menu == "Agenda Hoy":
+    st.header("📅 Agenda de Citas")
     
-    with st.container(border=True):
-        c1, c2 = st.columns([3, 1])
-        with c1:
-            st.markdown(f"#### {j_nom} <small>({j_club})</small>", unsafe_allow_html=True)
-            st.markdown(f"**Participación:** {int(j_pct)}%")
-            st.write(f"Inversión: € {formatear_total(j_costo)} | Score: {score}")
-        with c2:
-            confirmar_v = st.checkbox("Confirmar Venta", key=f"chk_{j_id}")
-            valor_salida = j_costo * 0.99
-            if st.button(f"VENDER €{formatear_total(valor_salida)}", key=f"btn_{j_id}", disabled=not confirmar_v):
-                ejecutar_db("DELETE FROM cartera WHERE id = ?", (j_id,), commit=True)
-                ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (valor_salida, u_id), commit=True)
-                ejecutar_db("INSERT INTO historial (usuario_id, detalle, monto, fecha) VALUES (?,?,?,?)", (u_id, f"Venta {j_nom}", valor_salida, datetime.now().strftime("%Y-%m-%d %H:%M")), commit=True)
-                st.rerun()
-
-# --- 8. RANKING E HISTORIAL ---
-st.divider()
-c_rank, c_hist = st.columns(2)
-with c_rank:
-    with st.expander("🏆 Ranking"):
-        res = ejecutar_db("SELECT nombre, prestigio, presupuesto FROM usuarios ORDER BY prestigio DESC")
-        st.table(pd.DataFrame(res, columns=['Agente', 'Rep', 'Caja']))
-with c_hist:
-    with st.expander("📜 Historial"):
-        h = ejecutar_db("SELECT fecha, detalle, monto FROM historial WHERE usuario_id = ? ORDER BY id DESC LIMIT 15", (u_id,))
-        st.dataframe(pd.DataFrame(h, columns=['Fecha', 'Evento', 'Monto']), hide_index=True)
-
-# --- 9. MODO DUELO 1 VS 1 (SISTEMA DE ESPERA) ---
-st.divider()
-st.header("⚔️ Centro de Desafíos 1 vs 1")
-
-import random
-
-# Crear tabla de duelos si no existe
-ejecutar_db('''CREATE TABLE IF NOT EXISTS duelos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                retador_id INTEGER,
-                rival_id INTEGER,
-                jugador_retador TEXT,
-                jugador_rival TEXT,
-                apuesta REAL,
-                estado TEXT DEFAULT 'PENDIENTE')''', commit=True)
-
-# --- SECCIÓN A: LANZAR DESAFÍO ---
-oponentes = ejecutar_db("SELECT id, nombre FROM usuarios WHERE id != ?", (u_id,))
-nombres_oponentes = {op[1]: op[0] for op in oponentes}
-
-with st.expander("🆕 Lanzar nuevo desafío"):
-    if not oponentes:
-        st.info("No hay otros agentes para desafiar.")
-    else:
-        c1, c2, c3 = st.columns(3)
-        rival_sel = c1.selectbox("¿A quién desafías?", options=[""] + list(nombres_oponentes.keys()))
-        mi_jugador_sel = c2.selectbox("Tu campeón:", options=[""] + [j[1] for j in cartera])
-        monto_apuesta = c3.number_input("Apuesta (€):", min_value=10000, max_value=int(presupuesto), step=10000)
-
-        if st.button("Enviar Reto"):
-            if rival_sel and mi_jugador_sel:
-                r_id = nombres_oponentes[rival_sel]
-                # Congelar presupuesto al retador
-                ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (monto_apuesta, u_id), commit=True)
-                # Registrar duelo
-                ejecutar_db("INSERT INTO duelos (retador_id, rival_id, jugador_retador, apuesta) VALUES (?,?,?,?)", 
-                            (u_id, r_id, mi_jugador_sel, monto_apuesta), commit=True)
-                st.success(f"Reto enviado a {rival_sel}. El dinero ha sido reservado.")
-                st.rerun()
-
-# --- SECCIÓN B: DUELOS RECIBIDOS (CON VALIDACIÓN DE PUNTAJE > 0) ---
-st.subheader("📩 Desafíos Recibidos")
-retos_pendientes = ejecutar_db("""SELECT d.id, u.nombre, d.jugador_retador, d.apuesta, d.retador_id 
-                                 FROM duelos d JOIN usuarios u ON d.retador_id = u.id 
-                                 WHERE d.rival_id = ? AND d.estado = 'PENDIENTE'""", (u_id,))
-
-if not retos_pendientes:
-    st.caption("No tienes retos pendientes por ahora.")
-else:
-    for d_id, r_nom, j_retador, d_apuesta, ret_id in retos_pendientes:
-        with st.container(border=True):
-            col_info, col_accion = st.columns([3, 1])
-            col_info.write(f"**{r_nom}** te desafía por **€ {formatear_total(d_apuesta)}**")
-            col_info.caption(f"Él juega con: {j_retador}")
-            
-            defensor = col_accion.selectbox("Defiende con:", options=[""] + [j[1] for j in cartera], key=f"def_{d_id}")
-            
-            if col_accion.button("ACEPTAR DUELO", key=f"btn_acc_{d_id}"):
-                if defensor:
-                    # 1. Obtener puntos del Excel
-                    def get_pts(n):
-                        m = df_oficial[df_oficial.iloc[:, 0].str.strip() == n.strip()]
-                        try:
-                            return float(m['ScoreOficial'].values[0]) if not m.empty else 0.0
-                        except:
-                            return 0.0
-                    
-                    p_retador = get_pts(j_retador)
-                    p_rival = get_pts(defensor)
-                    
-                    # --- VALIDACIÓN CRÍTICA: NO CERO O VACÍO ---
-                    if p_retador <= 0 or p_rival <= 0:
-                        st.warning(f"El duelo no se puede resolver aún. Uno de los jugadores tiene puntaje 0 o vacío. (Retador: {p_retador} | Tú: {p_rival})")
-                    else:
-                        # 2. Lógica de pago si ambos son > 0
-                        if p_retador > p_rival:
-                            # Gana el retador: se le devuelve su apuesta congelada + la apuesta ganada del rival
-                            # Al rival se le descuenta ahora que aceptó y perdió
-                            ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (d_apuesta, u_id), commit=True)
-                            ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + (2 * ?) WHERE id = ?", (d_apuesta, ret_id), commit=True)
-                            res_msg = f"🏆 Ganó {r_nom} ({p_retador} vs {p_rival}). Perdiste € {formatear_total(d_apuesta)}."
-                        
-                        elif p_rival > p_retador:
-                            # Ganas tú (rival): Se te suma la apuesta del otro y no se te descuenta nada
-                            ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (d_apuesta, u_id), commit=True)
-                            res_msg = f"🔥 ¡Ganaste tú! ({p_rival} vs {p_retador}). Sumaste € {formatear_total(d_apuesta)}."
-                        
-                        else:
-                            # Empate: Devolver dinero al retador
-                            ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (d_apuesta, ret_id), commit=True)
-                            res_msg = "🤝 Empate técnico. Nadie pierde dinero."
-
-                        # 3. Finalizar duelo
-                        ejecutar_db("UPDATE duelos SET estado = 'FINALIZADO', jugador_rival = ? WHERE id = ?", (defensor, d_id), commit=True)
-                        st.success(res_msg)
-                        st.rerun()
-                else:
-                    st.error("Debes seleccionar un defensor.")
-
-# --- SECCIÓN C: MIS RETOS ENVIADOS (REVISADO) ---
-st.subheader("⏳ Mis Retos en Espera")
-
-# Consulta mejorada: Traemos el nombre del rival y los datos del duelo
-mis_retos = ejecutar_db("""
-    SELECT u.nombre, d.jugador_retador, d.apuesta, d.estado 
-    FROM duelos d 
-    JOIN usuarios u ON d.rival_id = u.id 
-    WHERE d.retador_id = ? AND d.estado = 'PENDIENTE'
-""", (u_id,))
-
-if not mis_retos:
-    st.info("No tienes retos enviados pendientes de aceptación.")
+    col_cal, col_list = st.columns([1, 2])
     
-    # --- BLOQUE DE DEPURACIÓN (Solo para verificar si hay retos en la DB) ---
-    # total_duelos = ejecutar_db("SELECT COUNT(*) FROM duelos WHERE retador_id = ?", (u_id,))
-    # st.caption(f"Debug: Tienes un total de {total_duelos[0][0]} duelos registrados en la base de datos.")
-else:
-    for r_rival, r_jug, r_apuesta, r_estado in mis_retos:
-        with st.container(border=True):
-            c1, c2 = st.columns([3, 1])
-            c1.markdown(f"**Rival:** {r_rival}")
-            c1.caption(f"Tu campeón: {r_jug} | Apuesta: € {formatear_total(r_apuesta)}")
-            c2.warning("Pendiente")
+    with col_cal:
+        fecha_sel = st.date_input("Seleccionar Fecha", datetime.now())
+    
+    with col_list:
+        st.subheader(f"Citas para el {fecha_sel}")
+        citas = ejecutar_db("""
+            SELECT a.hora, p.nombre, a.motivo 
+            FROM agenda a JOIN pacientes p ON a.paciente_id = p.id 
+            WHERE a.fecha = ? ORDER BY a.hora ASC""", (fecha_sel.strftime("%Y-%m-%d"),))
+        
+        if not citas:
+            st.info("No hay citas programadas.")
+        else:
+            for hora, p_nom, motivo in citas:
+                with st.container():
+                    st.markdown(f"""
+                        <div style="background:white; padding:10px; border-left:5px solid #004E98; margin-bottom:10px; border-radius:5px;">
+                            <span style="font-weight:bold; color:#002147;">{hora}</span> - {p_nom} <br>
+                            <small style="color:gray;">Motivo: {motivo}</small>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+    # Botón para agendar nueva cita
+    with st.expander("➕ Programar nueva cita"):
+        todos_pacientes = ejecutar_db("SELECT id, nombre FROM pacientes")
+        dict_p = {p[1]: p[0] for p in todos_pacientes}
+        p_cita = st.selectbox("Paciente", options=list(dict_p.keys()))
+        f_cita = st.date_input("Fecha", key="f_cita")
+        h_cita = st.time_input("Hora")
+        m_cita = st.text_input("Motivo")
+        
+        if st.button("Confirmar Cita"):
+            ejecutar_db("INSERT INTO agenda (paciente_id, fecha, hora, motivo) VALUES (?,?,?,?)",
+                       (dict_p[p_cita], f_cita.strftime("%Y-%m-%d"), h_cita.strftime("%H:%M"), m_cita), commit=True)
+            st.rerun()
+
+# --- 6. SECCIÓN: BUSCADOR DE PACIENTES ---
+elif menu == "Pacientes":
+    st.header("🔍 Buscador de Pacientes")
+    busqueda = st.text_input("Ingresa nombre o DNI")
+    
+    if busqueda:
+        resultados = ejecutar_db("SELECT id, nombre, dni, historial_clinico FROM pacientes WHERE nombre LIKE ? OR dni LIKE ?", 
+                                (f'%{busqueda}%', f'%{busqueda}%'))
+        
+        for p_id, p_nom, p_dni, p_hist in resultados:
+            with st.expander(f"👤 {p_nom} (DNI: {p_dni})"):
+                st.write(f"**Historial:** {p_hist}")
+                
+                # Mostrar fotos del paciente
+                fotos = ejecutar_db("SELECT imagen_data, fecha FROM galerias WHERE paciente_id = ?", (p_id,))
+                if fotos:
+                    st.subheader("Galería de Imágenes")
+                    cols = st.columns(3)
+                    for idx, (img_blob, f_img) in enumerate(fotos):
+                        img = Image.open(io.BytesIO(img_blob))
+                        cols[idx % 3].image(img, caption=f"Fecha: {f_img}", use_container_width=True)
