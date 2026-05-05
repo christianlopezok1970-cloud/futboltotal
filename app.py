@@ -364,11 +364,27 @@ else:
                 else:
                     st.error("Debes seleccionar un defensor.")
 
-# --- SECCIÓN C: MIS RETOS ENVIADOS ---
+# --- SECCIÓN C: MIS RETOS ENVIADOS (REVISADO) ---
 st.subheader("⏳ Mis Retos en Espera")
-mis_retos = ejecutar_db("""SELECT u.nombre, jugador_retador, apuesta FROM duelos d 
-                          JOIN usuarios u ON d.rival_id = u.id 
-                          WHERE d.retador_id = ? AND d.estado = 'PENDIENTE'""", (u_id,))
 
-for r_rival, r_jug, r_apuesta in mis_retos:
-    st.write(f"Esperando que **{r_rival}** acepte tu duelo de **€ {formatear_total(r_apuesta)}** con {r_jug}")
+# Consulta mejorada: Traemos el nombre del rival y los datos del duelo
+mis_retos = ejecutar_db("""
+    SELECT u.nombre, d.jugador_retador, d.apuesta, d.estado 
+    FROM duelos d 
+    JOIN usuarios u ON d.rival_id = u.id 
+    WHERE d.retador_id = ? AND d.estado = 'PENDIENTE'
+""", (u_id,))
+
+if not mis_retos:
+    st.info("No tienes retos enviados pendientes de aceptación.")
+    
+    # --- BLOQUE DE DEPURACIÓN (Solo para verificar si hay retos en la DB) ---
+    # total_duelos = ejecutar_db("SELECT COUNT(*) FROM duelos WHERE retador_id = ?", (u_id,))
+    # st.caption(f"Debug: Tienes un total de {total_duelos[0][0]} duelos registrados en la base de datos.")
+else:
+    for r_rival, r_jug, r_apuesta, r_estado in mis_retos:
+        with st.container(border=True):
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"**Rival:** {r_rival}")
+            c1.caption(f"Tu campeón: {r_jug} | Apuesta: € {formatear_total(r_apuesta)}")
+            c2.warning("Pendiente")
