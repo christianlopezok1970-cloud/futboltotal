@@ -40,7 +40,7 @@ def generar_ficha_jugador(lista, indice):
     """Genera el HTML de la ficha del jugador o un espacio vacío"""
     if indice < len(lista):
         nombre = lista[indice]
-        # Limpiamos el nombre para visualización
+        # Limpiamos el nombre para visualización (Apellido solamente)
         apellido = nombre.split(',')[0] if ',' in nombre else nombre.split(' ')[0]
         return f'''
         <div style="text-align: center; width: 85px;">
@@ -115,9 +115,10 @@ with st.expander("🔍 BUSCAR Y FICHAR JUGADORES"):
                 else:
                     st.error("Saldo insuficiente.")
 
-# --- 6. CAMPO TÁCTICO (4-2-3-1 corregido) ---
+# --- 6. CAMPO TÁCTICO (Visualización 4-2-3-1) ---
 st.subheader("🏟️ Alineación Titular")
 
+# Recopilar jugadores actuales
 cartera_raw = ejecutar_db("SELECT nombre_jugador, posicion FROM cartera WHERE usuario_id = ?", (u_id,))
 equipo = {"ARQ": [], "DEF": [], "MED": [], "DEL": []}
 
@@ -129,34 +130,40 @@ for n, p in cartera_raw:
         elif any(x in p_up for x in ["MED", "MC", "VOL", "MCD", "MCO", "MEDIO"]): equipo["MED"].append(n)
         elif any(x in p_up for x in ["DEL", "EXT", "DC", "ATA", "DELANTERO"]): equipo["DEL"].append(n)
 
-# Estructura de la cancha en HTML
-html_cancha = f"""
+# Construir el HTML de la cancha en una variable
+html_final = f"""
 <div class="campo-tactico">
+    <!-- DELANTERO -->
     <div style="display: flex; justify-content: center; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["DEL"], 0)}
     </div>
+    <!-- MEDIOS ATAQUE -->
     <div style="display: flex; justify-content: space-around; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["MED"], 0)}
         {generar_ficha_jugador(equipo["MED"], 1)}
         {generar_ficha_jugador(equipo["MED"], 2)}
     </div>
+    <!-- MEDIOS DEFENSA -->
     <div style="display: flex; justify-content: center; gap: 100px; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["MED"], 3)}
         {generar_ficha_jugador(equipo["MED"], 4)}
     </div>
+    <!-- DEFENSA -->
     <div style="display: flex; justify-content: space-around; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["DEF"], 0)}
         {generar_ficha_jugador(equipo["DEF"], 1)}
         {generar_ficha_jugador(equipo["DEF"], 2)}
         {generar_ficha_jugador(equipo["DEF"], 3)}
     </div>
+    <!-- ARQUERO -->
     <div style="display: flex; justify-content: center;">
         {generar_ficha_jugador(equipo["ARQ"], 0)}
     </div>
 </div>
 """
-# Renderizado final con soporte de HTML activo
-st.markdown(html_cancha, unsafe_allow_html=True)
+
+# IMPORTANTE: st.markdown debe tener unsafe_allow_html=True al final
+st.markdown(html_final, unsafe_allow_html=True)
 
 # --- 7. GESTIÓN DE PLANTEL ---
 with st.expander("📋 VER PLANTEL / VENDER JUGADORES"):
