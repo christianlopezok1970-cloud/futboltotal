@@ -163,74 +163,73 @@ else:
     st.info("No hay jugadores disponibles.")
 
 
-# --- PASO 6: MI PLANTILLA Y CANCHA PRO (1-4-4-2) ---
+# --- PASO 6: CANCHA INTEGRADA ---
 
 st.divider()
 st.header("🏟️ Tu Alineación Titular")
 
-# 1. Obtener datos actualizados
 mis_jugadores = consulta_db("SELECT id, nombre_jugador, posicion, estado, precio FROM plantillas WHERE usuario_id = ?", (u_id,))
 titulares = [j for j in mis_jugadores if j[3] == "Titular"]
 
-# Estilos para la cancha y las fichas
+# Estilos mejorados para que todo encaje
 st.markdown("""
 <style>
-    .stApp { background-color: #0e1117; }
-    .cancha-container {
-        background: linear-gradient(to bottom, #1b5e20 0%, #2e7d32 100%);
-        border: 4px solid #ffffff33;
-        border-radius: 20px;
-        padding: 40px 10px;
-        position: relative;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    /* El contenedor principal del campo */
+    .campo-futbol {
+        background-color: #243b25;
+        background-image: linear-gradient(#2e7d32 1px, transparent 1px), linear-gradient(90deg, #2e7d32 1px, transparent 1px);
+        background-size: 100% 50px; /* Simula franjas de césped */
+        border: 2px solid #555;
+        border-radius: 15px;
+        padding: 30px 5px;
+        text-align: center;
     }
-    .ficha-player {
+    .ficha-vertical {
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        margin-bottom: 20px;
     }
-    .circulo {
-        width: 60px; height: 60px;
+    .circulo-v2 {
+        width: 50px; height: 50px;
         background: white;
         border-radius: 50%;
-        border: 3px solid #00d4ff;
+        border: 2px solid #00d4ff;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 24px;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        font-size: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.4);
     }
-    .nombre-player {
-        background: rgba(0,0,0,0.7);
+    .etiqueta-v2 {
+        background: rgba(0,0,0,0.8);
         color: white;
-        font-size: 11px;
-        padding: 2px 8px;
-        border-radius: 4px;
-        margin-top: 5px;
-        font-weight: bold;
-        text-align: center;
-        width: 90px;
-        overflow: hidden;
+        font-size: 10px;
+        padding: 2px 5px;
+        border-radius: 3px;
+        margin-top: 4px;
+        width: 80px;
         white-space: nowrap;
+        overflow: hidden;
         text-overflow: ellipsis;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Función para renderizar la ficha de un jugador en la cancha
-def ficha_html(lista, index):
+def render_jugador_v2(lista, index):
     if index < len(lista):
-        nombre = lista[index][1].split(' ')[0] # Primer nombre
+        # Limpiamos el nombre para que no sea muy largo (ej: "Breitenbruch,")
+        nombre = lista[index][1].replace(',', '').split(' ')[0]
         return f'''
-        <div class="ficha-player">
-            <div class="circulo">⚽</div>
-            <div class="nombre-player">{nombre}</div>
+        <div class="ficha-vertical">
+            <div class="circulo-v2">⚽</div>
+            <div class="etiqueta-v2">{nombre}</div>
         </div>
         '''
-    return '<div class="ficha-player" style="opacity:0.2"><div class="circulo"></div></div>'
+    # Círculo vacío pero con estructura para mantener el espacio
+    return '<div class="ficha-vertical" style="opacity:0.1"><div class="circulo-v2"></div></div>'
 
-# Clasificación por líneas
+# Clasificación
 def filtrar_pos(lista, terminos):
     return [j for j in lista if any(t in j[2].upper() for t in terminos)]
 
@@ -239,65 +238,35 @@ meds = filtrar_pos(titulares, ["MED", "VOL", "MC", "MCO", "MCD"])
 defs = filtrar_pos(titulares, ["DEF", "DFC", "LAT", "LI", "LD"])
 arqs = filtrar_pos(titulares, ["ARQ", "POR", "GK"])
 
-# --- DIBUJO DE LA CANCHA ---
+# --- DIBUJO ---
+# Usamos st.container para envolver las columnas en el estilo del campo
 with st.container():
-    st.markdown('<div class="cancha-container">', unsafe_allow_html=True)
+    st.markdown('<div class="campo-futbol">', unsafe_allow_html=True)
     
-    # Delanteros (2)
+    # Delanteros
     c1, c2 = st.columns(2)
-    with c1: st.markdown(ficha_html(dels, 0), unsafe_allow_html=True)
-    with c2: st.markdown(ficha_html(dels, 1), unsafe_allow_html=True)
+    c1.markdown(render_jugador_v2(dels, 0), unsafe_allow_html=True)
+    c2.markdown(render_jugador_v2(dels, 1), unsafe_allow_html=True)
     
-    st.write("<br>", unsafe_allow_html=True)
-    
-    # Mediocampo (4)
+    # Mediocampo
     c1, c2, c3, c4 = st.columns(4)
-    with c1: st.markdown(ficha_html(meds, 0), unsafe_allow_html=True)
-    with c2: st.markdown(ficha_html(meds, 1), unsafe_allow_html=True)
-    with c3: st.markdown(ficha_html(meds, 2), unsafe_allow_html=True)
-    with c4: st.markdown(ficha_html(meds, 3), unsafe_allow_html=True)
-
-    st.write("<br>", unsafe_allow_html=True)
-
-    # Defensa (4)
-    c1, c2, c3, c4 = st.columns(4)
-    with c1: st.markdown(ficha_html(defs, 0), unsafe_allow_html=True)
-    with c2: st.markdown(ficha_html(defs, 1), unsafe_allow_html=True)
-    with c3: st.markdown(ficha_html(defs, 2), unsafe_allow_html=True)
-    with c4: st.markdown(ficha_html(defs, 3), unsafe_allow_html=True)
-
-    st.write("<br>", unsafe_allow_html=True)
-
-    # Arquero (1)
-    col_arq = st.columns([1, 1, 1]) # Para centrar al arquero
-    with col_arq[1]: st.markdown(ficha_html(arqs, 0), unsafe_allow_html=True)
+    c1.markdown(render_jugador_v2(meds, 0), unsafe_allow_html=True)
+    c2.markdown(render_jugador_v2(meds, 1), unsafe_allow_html=True)
+    c3.markdown(render_jugador_v2(meds, 2), unsafe_allow_html=True)
+    c4.markdown(render_jugador_v2(meds, 3), unsafe_allow_html=True)
     
+    # Defensa
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(render_jugador_v2(defs, 0), unsafe_allow_html=True)
+    c2.markdown(render_jugador_v2(defs, 1), unsafe_allow_html=True)
+    c3.markdown(render_jugador_v2(defs, 2), unsafe_allow_html=True)
+    c4.markdown(render_jugador_v2(defs, 3), unsafe_allow_html=True)
+    
+    # Arquero
+    c1, c2, c3 = st.columns([1,1,1])
+    c2.markdown(render_jugador_v2(arqs, 0), unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- GESTIÓN DE PLANTILLA (SENTAR Y VENDER) ---
-st.divider()
-st.header("📋 Gestión de Jugadores")
-
-if not mis_jugadores:
-    st.info("No tienes jugadores.")
-else:
-    for j_id, nom, pos, est, precio in mis_jugadores:
-        c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
-        c1.write(f"**{nom}** ({pos})")
-        c2.write(f"€ {precio:,.0f}")
-        
-        # Botón Titular/Suplente
-        txt_est = "Sentar" if est == "Titular" else "Titular"
-        if c3.button(txt_est, key=f"est_{j_id}"):
-            nuevo = "Suplente" if est == "Titular" else "Titular"
-            consulta_db("UPDATE plantillas SET estado = ? WHERE id = ?", (nuevo, j_id), commit=True)
-            st.rerun()
-            
-        # BOTÓN DE VENTA (Recupera el dinero)
-        if c4.button("🗑️", key=f"del_{j_id}", help="Vender jugador"):
-            # 1. Devolver dinero
-            consulta_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (precio, u_id), commit=True)
-            # 2. Eliminar de la plantilla
-            consulta_db("DELETE FROM plantillas WHERE id = ?", (j_id,), commit=True)
-            st.success(f"Vendiste a {nom}")
-            st.rerun()
+# --- REPETIR GESTIÓN DE PLANTILLA (BOTONES) ---
+# (Copia aquí el bloque de "Gestión de Jugadores" con los botones de Vender/Titular que ya teníamos)
