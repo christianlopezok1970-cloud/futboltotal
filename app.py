@@ -2,12 +2,10 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 
-# --- CONFIGURACIÓN INICIAL ---
-DB_NAME = "liga_master_v2.db"
-PRESUPUESTO_INICIAL = 25_000_000
+# --- CONFIGURACIÓN Y BASES DE DATOS ---
+DB_NAME = "liga_master_v3.db"
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQed5yx4ReWBiR2IFct9y1jkLGVF9SIbn3RbzNYYZLJPhhcq_yy0WuTZWd0vVJAZ2kvD_walSrs-J-S/pub?output=csv"
 
-# --- MOTOR DE BASE DE DATOS ---
 def ejecutar_db(query, params=(), commit=False):
     with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
         cursor = conn.cursor()
@@ -15,193 +13,159 @@ def ejecutar_db(query, params=(), commit=False):
         if commit: conn.commit()
         return cursor.fetchall()
 
-def inicializar_tablas():
-    # Tabla de Usuarios
-    ejecutar_db("""CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT UNIQUE,
-        password TEXT,
-        presupuesto REAL DEFAULT 25000000
-    )""", commit=True)
-    
-    # Tabla de Plantillas (Cartera)
-    ejecutar_db("""CREATE TABLE IF NOT EXISTS plantillas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER,
-        nombre_jugador TEXT UNIQUE, 
-        posicion TEXT,
-        equipo TEXT,
-        precio REAL,
-        estado TEXT DEFAULT 'Suplente',
-        puntos INTEGER DEFAULT 0
-    )""", commit=True)
+# Inicialización limpia
+ejecutar_db("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT UNIQUE, password TEXT, presupuesto REAL DEFAULT 25000000)", commit=True)
+ejecutar_db("""CREATE TABLE IF NOT EXISTS plantillas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                usuario_id INTEGER, 
+                nombre_jugador TEXT UNIQUE, 
+                posicion TEXT, equipo TEXT, 
+                precio REAL, estado TEXT DEFAULT 'Suplente', 
+                puntos_jornada INTEGER DEFAULT 0)""", commit=True)
 
-inicializar_tablas()
-
-# --- FUNCIONES DE APOYO ---
+# --- CARGA DE DATOS ---
 @st.cache_data(ttl=60)
 def obtener_mercado():
-    df = pd.read_csv(SHEET_URL)
-    df.columns = [c.strip() for c in df.columns]
-    # Limpieza de precios: "€ 10.000.000" -> 10000000
-    df['PrecioNum'] = df.iloc[:, 3].replace(r'[\€\.]', '', regex=True).astype(float)
-    df['Posicion'] = df.iloc[:, 2].str.upper().str.strip()
-    df['Nombre'] = df.iloc[:, 0].strip()
-    df['Equipo'] = df.iloc[:, 1].strip()
-    return df
+    try:
+        df = pd.read_csv(SHEET_URL)
+        df.columns = [c.strip() for c in df.columns]
+        
+        # Limpieza de Cotización (Columna 4)
+        df['PrecioNum'] = (df['Cotización'].astype(str)
+                           .str.replace(r'[^\d]', '', regex=True))
+        df['PrecioNum'] = pd.to_numeric(df['PrecioNum'], errors='coerce').fillna(0)
+        
+        # Asegurar tipos de datos para evitar errores de comparación
+        df['Nombre'] = df['Nombre'].astype(str).str.strip()
+        df['POS'] = df['POS'].astype(str).str.upper().str.strip()
+        df['Equipo'] = df['Equipo'].astype(str).str.strip()
+        return df
+    except Exception as e:
+        st.error(f"Error en Excel: {e}")
+        return pd.DataFrame()
 
-# --- INTERFAZ: LOGIN ---
-st.set_page_config(page_title="Liga Master AI", layout="wide")
+# --- AUTENTICACIÓN ---
+st.set_page_config(page_title="Liga Master Pro", layout="wide")
 
 if 'user' not in st.session_state:
-    st.title("⚽ Bienvenid@ a Liga Master")
-    col1, col2 = st.columns(2)
-    with col1:
-        u_nom = st.text_input("Usuario")
-        u_pass = st.text_input("Contraseña", type="password")
-        if st.button("Entrar / Registrarse"):
-            user = ejecutar_db("SELECT id, presupuesto FROM usuarios WHERE nombre = ? AND password = ?", (u_nom, u_pass))
-            if user:
-                st.session_state.user = {"id": user[0][0], "nombre": u_nom}
-                st.rerun()
-            else:
-                # Registro automático para simplificar
-                try:
-                    ejecutar_db("INSERT INTO usuarios (nombre, password) VALUES (?,?)", (u_nom, u_pass), commit=True)
-                    st.success("Usuario creado. ¡Haz clic en Entrar!")
-                except: st.error("Credenciales incorrectas")
+    st.title("⚽ Liga Master: Acceso")
+    u_nom = st.text_input("Usuario").strip()
+    u_pass = st.text_input("Contraseña", type="password").strip()
+    if st.button("Entrar / Registrarse"):
+        res = ejecutar_db("SELECT id, presupuesto FROM usuarios WHERE nombre = ? AND password = ?", (u_nom, u_pass))
+        if res:
+            st.session_state.user = {"id": res[0][0], "nombre": u_nom}
+            st.rerun()
+        else:
+            try:
+                ejecutar_db("INSERT INTO usuarios (nombre, password) VALUES (?,?)", (u_nom, u_pass), commit=True)
+                st.success("Cuenta creada. ¡Presiona entrar!")
+            except: st.error("Error de login")
     st.stop()
 
-# Datos del usuario logueado
 u_id = st.session_state.user["id"]
 u_info = ejecutar_db("SELECT presupuesto FROM usuarios WHERE id = ?", (u_id,))[0]
 presupuesto_actual = u_info[0]
 
-# --- SIDEBAR: ESTADO DEL CLUB ---
+# --- INTERFAZ PRINCIPAL ---
 with st.sidebar:
-    st.header(f"🏟️ {st.session_state.user['nombre']}")
-    st.metric("Presupuesto", f"€ {presupuesto_actual:,.0f}")
-    if st.button("Cerrar Sesión"):
+    st.header(f"🎮 {st.session_state.user['nombre']}")
+    st.metric("Tu Presupuesto", f"€ {presupuesto_actual:,.0f}")
+    if st.button("Log Out"):
         del st.session_state.user
         st.rerun()
 
-# --- PESTAÑAS PRINCIPALES ---
-tab1, tab2, tab3 = st.tabs(["🛒 Mercado", "🏃 Plantilla & Cancha", "📊 Clasificación"])
+t1, t2, t3 = st.tabs(["🛒 MERCADO", "🏃 MI EQUIPO", "🏆 RANKING"])
 
-with tab1:
-    st.subheader("Mercado de Pases")
+# --- TAB 1: MERCADO ---
+with t1:
+    st.subheader("Fichajes Disponibles")
     df_m = obtener_mercado()
-    
-    # Filtro: Solo mostrar los que NO han sido comprados por nadie
-    jugadores_comprados = [j[0] for j in ejecutar_db("SELECT nombre_jugador FROM plantillas")]
-    df_disponible = df_m[~df_m['Nombre'].isin(jugadores_comprados)]
-    
-    selected_name = st.selectbox("Selecciona un jugador para fichar", [""] + df_disponible['Nombre'].tolist())
-    
-    if selected_name != "":
-        ficha = df_disponible[df_disponible['Nombre'] == selected_name].iloc[0]
-        st.write(f"**Posición:** {ficha['Posicion']} | **Equipo:** {ficha['Equipo']}")
-        st.write(f"**Precio:** € {ficha['PrecioNum']:,.0f}")
+    comprados = [j[0] for j in ejecutar_db("SELECT nombre_jugador FROM plantillas")]
+    df_disp = df_m[~df_m['Nombre'].isin(comprados)]
+
+    # Buscador amigable
+    busqueda = st.selectbox("Buscar Jugador", [""] + df_disp['Nombre'].tolist())
+    if busqueda:
+        f = df_disp[df_disp['Nombre'] == busqueda].iloc[0]
+        st.info(f"**{f['Nombre']}** | {f['Equipo']} | {f['POS']} | **Costo: € {f['PrecioNum']:,.0f}**")
         
-        if st.button(f"Fichar a {selected_name}"):
-            if presupuesto_actual >= ficha['PrecioNum']:
+        if st.button("CONFIRMAR COMPRA"):
+            if presupuesto_actual >= f['PrecioNum']:
                 try:
-                    # 1. Restar presupuesto
-                    ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (ficha['PrecioNum'], u_id), commit=True)
-                    # 2. Agregar a plantilla
+                    ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (f['PrecioNum'], u_id), commit=True)
                     ejecutar_db("INSERT INTO plantillas (usuario_id, nombre_jugador, posicion, equipo, precio) VALUES (?,?,?,?,?)",
-                                (u_id, ficha['Nombre'], ficha['Posicion'], ficha['Equipo'], ficha['PrecioNum']), commit=True)
-                    st.success("¡Fichaje completado!")
+                                (u_id, f['Nombre'], f['POS'], f['Equipo'], f['PrecioNum']), commit=True)
+                    st.success("¡Fichaje realizado!")
                     st.rerun()
-                except sqlite3.IntegrityError:
-                    st.error("Alguien te ganó de mano. El jugador ya no está disponible.")
+                except: st.error("Este jugador acaba de ser comprado por otro usuario.")
             else:
-                st.error("Presupuesto insuficiente.")
+                st.error("Fondos insuficientes.")
 
-with tab2:
-    st.subheader("Tu Equipo")
-    mi_equipo = ejecutar_db("SELECT id, nombre_jugador, posicion, estado, precio FROM plantillas WHERE usuario_id = ?", (u_id,))
+# --- TAB 2: MI EQUIPO & CANCHA ---
+with t2:
+    mis_jugadores = ejecutar_db("SELECT id, nombre_jugador, posicion, estado, precio FROM plantillas WHERE usuario_id = ?", (u_id,))
     
-    if not mi_equipo:
-        st.info("Aún no tienes jugadores. Ve al Mercado.")
-    else:
-        # Gestión de Venta y Estados
-        for j_id, nom, pos, est, precio in mi_equipo:
-            c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
-            c1.write(f"**{nom}** ({pos})")
-            c2.write(f"Estado: {est}")
-            
-            # Botón Titular/Suplente
-            label_btn = "Banquillo" if est == "Titular" else "Hacer Titular"
-            if c3.button(label_btn, key=f"est_{j_id}"):
-                nuevo = "Suplente" if est == "Titular" else "Titular"
-                ejecutar_db("UPDATE plantillas SET estado = ? WHERE id = ?", (nuevo, j_id), commit=True)
-                st.rerun()
-                
-            # Botón Venta
-            if c4.button("🗑️", key=f"del_{j_id}", help="Vender jugador"):
-                ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (precio, u_id), commit=True)
-                ejecutar_db("DELETE FROM plantillas WHERE id = ?", (j_id,), commit=True)
-                st.rerun()
+    col_lista, col_cancha = st.columns([1, 1])
 
-    # --- DIBUJO DE LA CANCHA 1-4-4-2 ---
-    st.divider()
-    st.subheader("🏟️ Alineación 1-4-4-2")
-    titulares = [j for j in mi_equipo if j[3] == "Titular"]
+    with col_lista:
+        st.write("### Gestión de Plantilla")
+        for j_id, nom, pos, est, precio in mis_jugadores:
+            with st.expander(f"{nom} ({pos}) - {est}"):
+                c1, c2 = st.columns(2)
+                if c1.button("Cambiar Rol", key=f"rol_{j_id}"):
+                    nuevo = "Titular" if est == "Suplente" else "Suplente"
+                    ejecutar_db("UPDATE plantillas SET estado = ? WHERE id = ?", (nuevo, j_id), commit=True)
+                    st.rerun()
+                if c2.button("Vender (Reembolso)", key=f"vend_{j_id}"):
+                    ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (precio, u_id), commit=True)
+                    ejecutar_db("DELETE FROM plantillas WHERE id = ?", (j_id,), commit=True)
+                    st.rerun()
+
+    with col_cancha:
+        st.write("### Táctica 1-4-4-2")
+        titulares = [j for j in mis_jugadores if j[3] == "Titular"]
+        
+        def filtrar(p_list):
+            return [j[1] for j in titulares if any(x in j[2] for x in p_list)]
+
+        arq = filtrar(["ARQ", "POR", "GK"])
+        defensas = filtrar(["DEF", "DFC", "LAT", "LI", "LD"])
+        medios = filtrar(["MED", "VOL", "MC", "MCO", "MCD"])
+        delanteros = filtrar(["DEL", "ATA", "DC", "EXT"])
+
+        # Visualización de cancha sencilla
+        st.markdown("""<style>.campo { background:#1b5e20; padding:15px; border-radius:10px; border:2px solid white; text-align:center; color:white; }</style>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class='campo'>
+            <p>⚽ DEL: {', '.join(delanteros[:2])}</p><hr>
+            <p>🏃 MED: {', '.join(medios[:4])}</p><hr>
+            <p>🛡️ DEF: {', '.join(defensas[:4])}</p><hr>
+            <p>🧤 ARQ: {', '.join(arq[:1])}</p>
+        </div>""", unsafe_allow_html=True)
+
+# --- TAB 3: PUNTUACIÓN Y PREMIOS ---
+with t3:
+    st.write("### Resultados de la Jornada")
     
-    # Lógica simple de dibujo
-    def dibujar_linea(jugadores_pos):
-        cols = st.columns(len(jugadores_pos) if jugadores_pos else 1)
-        for idx, j in enumerate(jugadores_pos):
-            cols[idx].markdown(f"**{j[1]}**")
-
-    # Separar por posiciones
-    arqs = [j for j in titulares if "ARQ" in j[2] or "POR" in j[2]]
-    defs = [j for j in titulares if "DEF" in j[2] or "LAT" in j[2] or "DFC" in j[2]]
-    meds = [j for j in titulares if "MED" in j[2] or "VOL" in j[2] or "MC" in j[2]]
-    dels = [j for j in titulares if "DEL" in j[2] or "ATA" in j[2] or "DC" in j[2]]
-
-    st.markdown("<div style='background-color:#2e7d32; padding:20px; border-radius:10px; text-align:center; color:white'>", unsafe_allow_html=True)
-    st.write("--- DELANTEROS ---")
-    dibujar_linea(dels[:2])
-    st.write("--- MEDIOCAMPO ---")
-    dibujar_linea(meds[:4])
-    st.write("--- DEFENSA ---")
-    dibujar_linea(defs[:4])
-    st.write("--- ARQUERO ---")
-    dibujar_linea(arqs[:1])
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with tab3:
-    st.subheader("Performance de la Liga")
-    st.info("Los puntos se asignan al finalizar la jornada.")
-    
-    # Sistema de premios (Botón simulador para el admin)
-    if st.checkbox("Simular Fin de Jornada (Admin)"):
-        if st.button("Asignar Puntos Aleatorios y Premiar"):
-            # Asignar puntos al azar entre 1 y 10 a todos los jugadores comprados
-            ejecutar_db("UPDATE plantillas SET puntos = ABS(RANDOM() % 10)", commit=True)
+    if st.checkbox("⚙️ Modo Administrador (Cerrar Jornada)"):
+        premio_x = st.number_input("Monto del Premio (en €)", value=2000000)
+        if st.button("Finalizar Jornada y Entregar Premio"):
+            # 1. Asignar puntos aleatorios (simulando los del Excel)
+            ejecutar_db("UPDATE plantillas SET puntos_jornada = ABS(RANDOM() % 15)", commit=True)
             
-            # Calcular qué usuario sumó más
-            ranking = ejecutar_db("""
-                SELECT usuario_id, SUM(puntos) as total 
-                FROM plantillas 
-                GROUP BY usuario_id 
-                ORDER BY total DESC LIMIT 1
-            """)
-            
-            if ranking:
-                ganador_id, puntos_max = ranking[0]
-                premio = 5_000_000
-                ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (premio, ganador_id), commit=True)
-                st.success(f"¡El usuario ID {ganador_id} ganó la jornada con {puntos_max} puntos y recibe €5M!")
+            # 2. Buscar al ganador
+            ganador = ejecutar_db("""SELECT usuario_id, SUM(puntos_jornada) as total 
+                                   FROM plantillas GROUP BY usuario_id 
+                                   ORDER BY total DESC LIMIT 1""")
+            if ganador:
+                g_id, g_pts = ganador[0]
+                ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (premio_x, g_id), commit=True)
+                st.balloons()
+                st.success(f"¡Jornada Cerrada! El ganador sumó {g_pts} puntos y ganó €{premio_x:,.0f}")
                 st.rerun()
 
-    # Mostrar Tabla General
-    tabla = ejecutar_db("""
-        SELECT u.nombre, SUM(p.puntos) as pts 
-        FROM usuarios u 
-        LEFT JOIN plantillas p ON u.id = p.usuario_id 
-        GROUP BY u.id ORDER BY pts DESC
-    """)
-    st.table(pd.DataFrame(tabla, columns=["Usuario", "Puntos Totales"]))
+    # Tabla de posiciones
+    tabla = ejecutar_db("""SELECT u.nombre, SUM(p.puntos_jornada) as total_pts 
+                         FROM usuarios u LEFT JOIN plantillas p ON u.id = p.usuario_id 
+                         GROUP BY u.id ORDER BY total_pts DESC""")
+    st.table(pd.DataFrame(tabla, columns=["Usuario", "Puntos de Jornada"]))
