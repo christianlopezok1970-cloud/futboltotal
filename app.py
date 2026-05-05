@@ -265,80 +265,110 @@ with c_hist:
         h = ejecutar_db("SELECT fecha, detalle, monto FROM historial WHERE usuario_id = ? ORDER BY id DESC LIMIT 15", (u_id,))
         st.dataframe(pd.DataFrame(h, columns=['Fecha', 'Evento', 'Monto']), hide_index=True)
 
-# --- 9. MODO DUELO 1 VS 1 (CORREGIDO) ---
+# --- 9. MODO DUELO 1 VS 1 (SISTEMA DE ESPERA) ---
 st.divider()
-st.header("⚔️ Modo Duelo: 1 vs 1")
+st.header("⚔️ Centro de Desafíos 1 vs 1")
 
-# Importación necesaria para evitar el NameError
 import random
 
-# 1. Preparar datos de oponentes[cite: 1]
+# Crear tabla de duelos si no existe
+ejecutar_db('''CREATE TABLE IF NOT EXISTS duelos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                retador_id INTEGER,
+                rival_id INTEGER,
+                jugador_retador TEXT,
+                jugador_rival TEXT,
+                apuesta REAL,
+                estado TEXT DEFAULT 'PENDIENTE')''', commit=True)
+
+# --- SECCIÓN A: LANZAR DESAFÍO ---
 oponentes = ejecutar_db("SELECT id, nombre FROM usuarios WHERE id != ?", (u_id,))
 nombres_oponentes = {op[1]: op[0] for op in oponentes}
 
-if not oponentes:
-    st.info("Necesitas que otros agentes se registrren para poder desafiarlos.")
-else:
-    with st.expander("Configurar Desafío"):
+with st.expander("🆕 Lanzar nuevo desafío"):
+    if not oponentes:
+        st.info("No hay otros agentes para desafiar.")
+    else:
         c1, c2, c3 = st.columns(3)
-        
-        # Selección de rival
-        rival_nom = c1.selectbox("Selecciona un Agente Rival:", options=[""] + list(nombres_oponentes.keys()))
-        
-        # Selección de mi jugador[cite: 1]
-        mis_jugadores_nombres = [j[1] for j in cartera]
-        mi_elegido = c2.selectbox("Tu Jugador para el duelo:", options=[""] + mis_jugadores_nombres)
-        
-        # Dinero en juego (Mínimo 10k, máximo el presupuesto del usuario)[cite: 1]
-        apuesta = c3.number_input("Dinero en juego (€):", min_value=10000, max_value=int(presupuesto) if presupuesto > 10000 else 10000, step=10000)
+        rival_sel = c1.selectbox("¿A quién desafías?", options=[""] + list(nombres_oponentes.keys()))
+        mi_jugador_sel = c2.selectbox("Tu campeón:", options=[""] + [j[1] for j in cartera])
+        monto_apuesta = c3.number_input("Apuesta (€):", min_value=10000, max_value=int(presupuesto), step=10000)
 
-        if st.button("🔥 ¡LANZAR DUELO!", type="primary"):
-            if rival_nom and mi_elegido:
-                rival_id = nombres_oponentes[rival_nom]
-                
-                # Obtener un jugador aleatorio del rival para defender[cite: 1]
-                cartera_rival = ejecutar_db("SELECT nombre_jugador FROM cartera WHERE usuario_id = ?", (rival_id,))
-                
-                if not cartera_rival:
-                    st.error(f"El agente {rival_nom} no tiene jugadores en su cartera para defender.")
-                else:
-                    # Aquí es donde fallaba antes, ahora con import random funcionará[cite: 1]
-                    rival_elegido = random.choice(cartera_rival)[0]
-                    
-                    # Función interna para obtener puntos del Excel[cite: 1]
-                    def obtener_puntos(nombre):
-                        match = df_oficial[df_oficial.iloc[:, 0].str.strip() == nombre.strip()]
-                        return float(match['ScoreOficial'].values[0]) if not match.empty else 0.0
+        if st.button("Enviar Reto"):
+            if rival_sel and mi_jugador_sel:
+                r_id = nombres_oponentes[rival_sel]
+                # Congelar presupuesto al retador
+                ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (monto_apuesta, u_id), commit=True)
+                # Registrar duelo
+                ejecutar_db("INSERT INTO duelos (retador_id, rival_id, jugador_retador, apuesta) VALUES (?,?,?,?)", 
+                            (u_id, r_id, mi_jugador_sel, monto_apuesta), commit=True)
+                st.success(f"Reto enviado a {rival_sel}. El dinero ha sido reservado.")
+                st.rerun()
 
-                    pts_mio = obtener_puntos(mi_elegido)
-                    pts_rival = obtener_puntos(rival_elegido)
+# --- SECCIÓN B: DUELOS RECIBIDOS (CON VALIDACIÓN DE PUNTAJE > 0) ---
+st.subheader("📩 Desafíos Recibidos")
+retos_pendientes = ejecutar_db("""SELECT d.id, u.nombre, d.jugador_retador, d.apuesta, d.retador_id 
+                                 FROM duelos d JOIN usuarios u ON d.retador_id = u.id 
+                                 WHERE d.rival_id = ? AND d.estado = 'PENDIENTE'""", (u_id,))
+
+if not retos_pendientes:
+    st.caption("No tienes retos pendientes por ahora.")
+else:
+    for d_id, r_nom, j_retador, d_apuesta, ret_id in retos_pendientes:
+        with st.container(border=True):
+            col_info, col_accion = st.columns([3, 1])
+            col_info.write(f"**{r_nom}** te desafía por **€ {formatear_total(d_apuesta)}**")
+            col_info.caption(f"Él juega con: {j_retador}")
+            
+            defensor = col_accion.selectbox("Defiende con:", options=[""] + [j[1] for j in cartera], key=f"def_{d_id}")
+            
+            if col_accion.button("ACEPTAR DUELO", key=f"btn_acc_{d_id}"):
+                if defensor:
+                    # 1. Obtener puntos del Excel
+                    def get_pts(n):
+                        m = df_oficial[df_oficial.iloc[:, 0].str.strip() == n.strip()]
+                        try:
+                            return float(m['ScoreOficial'].values[0]) if not m.empty else 0.0
+                        except:
+                            return 0.0
                     
-                    st.markdown(f"### Resultado del Duelo")
-                    st.write(f"🛡️ **{manager}** con `{mi_elegido}`: **{pts_mio} pts**")
-                    st.write(f"⚔️ **{rival_nom}** con `{rival_elegido}`: **{pts_rival} pts**")
+                    p_retador = get_pts(j_retador)
+                    p_rival = get_pts(defensor)
                     
-                    if pts_mio > pts_rival:
-                        # Gana el usuario actual: suma a uno, resta al otro[cite: 1]
-                        ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (apuesta, u_id), commit=True)
-                        ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (apuesta, rival_id), commit=True)
-                        ejecutar_db("INSERT INTO historial (usuario_id, detalle, monto, fecha) VALUES (?,?,?,?)", 
-                                    (u_id, f"Victoria duelo vs {rival_nom}", apuesta, datetime.now().strftime("%Y-%m-%d %H:%M")), commit=True)
-                        st.success(f"¡GANASTE! Has ganado € {formatear_total(apuesta)}.")
-                        st.balloons()
-                    
-                    elif pts_rival > pts_mio:
-                        # Gana el rival: resta a uno, suma al otro[cite: 1]
-                        ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (apuesta, u_id), commit=True)
-                        ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (apuesta, rival_id), commit=True)
-                        ejecutar_db("INSERT INTO historial (usuario_id, detalle, monto, fecha) VALUES (?,?,?,?)", 
-                                    (u_id, f"Derrota duelo vs {rival_nom}", -apuesta, datetime.now().strftime("%Y-%m-%d %H:%M")), commit=True)
-                        st.error(f"PERDISTE. Has perdido € {formatear_total(apuesta)}.")
-                    
+                    # --- VALIDACIÓN CRÍTICA: NO CERO O VACÍO ---
+                    if p_retador <= 0 or p_rival <= 0:
+                        st.warning(f"El duelo no se puede resolver aún. Uno de los jugadores tiene puntaje 0 o vacío. (Retador: {p_retador} | Tú: {p_rival})")
                     else:
-                        st.warning("¡EMPATE! Los puntajes son iguales, nadie pierde dinero.")
-                    
-                    # Botón para forzar refresco de la UI
-                    if st.button("Finalizar Duelo"):
+                        # 2. Lógica de pago si ambos son > 0
+                        if p_retador > p_rival:
+                            # Gana el retador: se le devuelve su apuesta congelada + la apuesta ganada del rival
+                            # Al rival se le descuenta ahora que aceptó y perdió
+                            ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (d_apuesta, u_id), commit=True)
+                            ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + (2 * ?) WHERE id = ?", (d_apuesta, ret_id), commit=True)
+                            res_msg = f"🏆 Ganó {r_nom} ({p_retador} vs {p_rival}). Perdiste € {formatear_total(d_apuesta)}."
+                        
+                        elif p_rival > p_retador:
+                            # Ganas tú (rival): Se te suma la apuesta del otro y no se te descuenta nada
+                            ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (d_apuesta, u_id), commit=True)
+                            res_msg = f"🔥 ¡Ganaste tú! ({p_rival} vs {p_retador}). Sumaste € {formatear_total(d_apuesta)}."
+                        
+                        else:
+                            # Empate: Devolver dinero al retador
+                            ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto + ? WHERE id = ?", (d_apuesta, ret_id), commit=True)
+                            res_msg = "🤝 Empate técnico. Nadie pierde dinero."
+
+                        # 3. Finalizar duelo
+                        ejecutar_db("UPDATE duelos SET estado = 'FINALIZADO', jugador_rival = ? WHERE id = ?", (defensor, d_id), commit=True)
+                        st.success(res_msg)
                         st.rerun()
-            else:
-                st.warning("Selecciona un rival y un jugador de tu cartera.")
+                else:
+                    st.error("Debes seleccionar un defensor.")
+
+# --- SECCIÓN C: MIS RETOS ENVIADOS ---
+st.subheader("⏳ Mis Retos en Espera")
+mis_retos = ejecutar_db("""SELECT u.nombre, jugador_retador, apuesta FROM duelos d 
+                          JOIN usuarios u ON d.rival_id = u.id 
+                          WHERE d.retador_id = ? AND d.estado = 'PENDIENTE'""", (u_id,))
+
+for r_rival, r_jug, r_apuesta in mis_retos:
+    st.write(f"Esperando que **{r_rival}** acepte tu duelo de **€ {formatear_total(r_apuesta)}** con {r_jug}")
