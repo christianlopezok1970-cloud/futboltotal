@@ -69,52 +69,42 @@ st.title("⚽ Liga Master - Fase de Construcción")
 st.write("Cimientos listos. El motor de base de datos y el Excel están vinculados.")
 
 # --- PASO 4: SISTEMA DE IDENTIDAD (Login) ---
+# --- PASO 4: SISTEMA DE IDENTIDAD (Login) ---
 
-# Usamos st.session_state para que la app "recuerde" quién eres mientras navegas
 if 'user' not in st.session_state:
     st.subheader("🔑 Acceso al Club")
-    # Formulario de entrada
     nombre_usuario = st.text_input("Nombre de tu Usuario / Equipo").strip()
     clave_usuario = st.text_input("Contraseña", type="password").strip()
 
     if st.button("Ingresar o Registrarse"):
         if nombre_usuario and clave_usuario:
-            # Buscamos si el usuario ya existe en nuestra base de datos
             datos = consulta_db("SELECT id, nombre, presupuesto FROM usuarios WHERE nombre = ? AND password = ?", 
                                 (nombre_usuario, clave_usuario))
             
             if datos:
-                # Si existe, guardamos su identidad en la sesión
-                st.session_state.user = {"id": datos[0][0], "nombre": datos[0][1]}
-                st.success(f"Bienvenido de nuevo, {nombre_usuario}!")
+                st.session_state.user = {"id": datos[0][0], "nombre": nombre_usuario}
                 st.rerun()
             else:
-                # Si no existe, lo registramos automáticamente como nuevo jugador
                 try:
                     consulta_db("INSERT INTO usuarios (nombre, password) VALUES (?, ?)", 
                                 (nombre_usuario, clave_usuario), commit=True)
-                    st.success("¡Usuario creado con éxito! Haz clic en el botón de nuevo para entrar.")
+                    st.success("¡Usuario creado! Haz clic de nuevo para entrar.")
                 except:
-                    st.error("Ese nombre de usuario ya existe, pero la contraseña es incorrecta.")
+                    st.error("Nombre ocupado o contraseña incorrecta.")
         else:
-            st.warning("Por favor, completa ambos campos.")
-    st.stop() # Si no está logueado, el código se detiene aquí
+            st.warning("Completa los campos.")
+    st.stop()
 
-# --- SI LLEGAMOS AQUÍ, EL USUARIO YA ESTÁ LOGUEADO ---
+# --- DATOS DEL USUARIO LOGUEADO ---
 u_id = st.session_state.user["id"]
 u_nombre = st.session_state.user["nombre"]
 
-# Consultamos el presupuesto real actualizado desde la DB
+# Consultamos presupuesto real
 res_presupuesto = consulta_db("SELECT presupuesto FROM usuarios WHERE id = ?", (u_id,))
 presupuesto_actual = res_presupuesto[0][0]
 
-# Mostramos una cabecera personalizada
+# Mostramos solo la info en la barra lateral (Sin botón de cerrar)
 st.sidebar.write(f"👤 Jugador: **{u_nombre}**")
 st.sidebar.write(f"💰 Fondos: **€ {presupuesto_actual:,.0f}**")
 
-if st.sidebar.button("Cerrar Sesión"):
-    del st.session_state.user
-    st.rerun()
-
-st.write(f"### 🏟️ Oficina de {u_nombre}")
-st.write("Ahora que te reconozco, podemos proceder a armar el mercado y la cancha.")
+st.write(f"### 🏟️ Oficina de {u_nombre}")mos proceder a armar el mercado y la cancha.")
