@@ -69,7 +69,6 @@ st.title("⚽ Liga Master - Fase de Construcción")
 st.write("Cimientos listos. El motor de base de datos y el Excel están vinculados.")
 
 # --- PASO 4: SISTEMA DE IDENTIDAD (Login) ---
-# --- PASO 4: SISTEMA DE IDENTIDAD (Login) ---
 
 if 'user' not in st.session_state:
     st.subheader("🔑 Acceso al Club")
@@ -107,4 +106,4 @@ presupuesto_actual = res_presupuesto[0][0]
 st.sidebar.write(f"👤 Jugador: **{u_nombre}**")
 st.sidebar.write(f"💰 Fondos: **€ {presupuesto_actual:,.0f}**")
 
-st.write(f"### 🏟️ Oficina de {u_nombre}")mos proceder a armar el mercado y la cancha.")
+st.write(f"### 🏟️ Oficina de {u_nombre}")
