@@ -28,28 +28,30 @@ def cargar_datos_completos_google():
     try:
         df = pd.read_csv(SHEET_URL)
         df.columns = [c.strip() for c in df.columns]
-        # Limpieza de cotización (Columna D)
+        # Cotización (Columna D / Índice 3)
         df['ValorNum'] = df.iloc[:, 3].apply(lambda x: int(''.join(filter(str.isdigit, str(x)))) if pd.notnull(x) else 1000000)
-        # Posición (Columna C)
-        df['Posicion'] = df.iloc[:, 2].str.upper().str.strip()
+        # Posición (Columna C / Índice 2)
+        df['Posicion'] = df.iloc[:, 2].astype(str).str.upper().str.strip()
         df['Display'] = df.iloc[:, 0] + " [" + df['Posicion'] + "]"
         return df
     except: return pd.DataFrame()
 
 def generar_ficha_jugador(lista, indice):
-    """Genera el círculo del jugador en la cancha o un espacio vacío si no existe"""
+    """Genera el HTML de la ficha del jugador o un espacio vacío"""
     if indice < len(lista):
         nombre = lista[indice]
+        # Limpiamos el nombre para que no sea tan largo (ej: "Carrillo, Guido" -> "Carrillo")
+        apellido = nombre.split(',')[0] if ',' in nombre else nombre.split(' ')[0]
         return f'''
         <div style="text-align: center; width: 85px;">
-            <div style="width: 55px; height: 55px; background: white; border-radius: 50%; border: 3px solid #00D4FF; margin: 0 auto; color: black; line-height: 55px; font-weight: bold; font-size: 20px; box-shadow: 0px 0px 10px rgba(0,212,255,0.5);">⚽</div>
-            <div style="font-size: 11px; color: white; background: rgba(0,0,0,0.7); margin-top: 5px; border-radius: 5px; padding: 2px; font-weight: bold;">{nombre}</div>
+            <div style="width: 55px; height: 55px; background: white; border-radius: 50%; border: 3px solid #00D4FF; margin: 0 auto; color: black; line-height: 55px; font-weight: bold; font-size: 18px; box-shadow: 0px 0px 10px rgba(0,212,255,0.5);">⚽</div>
+            <div style="font-size: 11px; color: white; background: rgba(0,0,0,0.8); margin-top: 5px; border-radius: 5px; padding: 2px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{apellido}</div>
         </div>
         '''
-    return '<div style="width: 85px; opacity: 0.2;"><div style="width: 55px; height: 55px; background: #ffffff55; border-radius: 50%; margin: 0 auto;"></div></div>'
+    return '<div style="width: 85px; opacity: 0.2;"><div style="width: 55px; height: 55px; background: #ffffff55; border-radius: 50%; margin: 0 auto; border: 1px dashed white;"></div></div>'
 
 # --- 3. INTERFAZ Y ESTILOS ---
-st.set_page_config(page_title="Agencia Scouting V2", layout="wide")
+st.set_page_config(page_title="Futbol Total Manager", layout="wide")
 
 st.markdown("""
     <style>
@@ -57,30 +59,32 @@ st.markdown("""
     h1, h2, h3, h4, p, span, label { color: #f0f2f6 !important; }
     .campo-tactico {
         background-color: #2e7d32;
-        background-image: radial-gradient(circle, #388e3c 1px, transparent 1px);
-        background-size: 20px 20px;
+        background-image: linear-gradient(rgba(255,255,255,0.1) 2px, transparent 2px), 
+                          linear-gradient(90deg, rgba(255,255,255,0.1) 2px, transparent 2px);
+        background-size: 100% 50px, 50px 100%;
         border: 4px solid #ffffffaa;
         border-radius: 20px;
-        padding: 30px 10px;
+        padding: 40px 10px;
         box-shadow: inset 0px 0px 50px rgba(0,0,0,0.5);
+        margin-bottom: 20px;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 4. ACCESO DE USUARIO ---
 with st.sidebar:
-    st.title("⚽ Manager V2")
+    st.title("🏆 Futbol Total")
     manager = st.text_input("Agente:").strip()
     password = st.text_input("Contraseña:", type="password").strip()
 
 if not manager or not password:
-    st.info("👋 Ingresa para gestionar tu equipo.")
+    st.info("👋 Bienvenido. Ingresa tus credenciales para gestionar tu equipo.")
     st.stop()
 
-# Lógica de Login
 datos = ejecutar_db("SELECT id, presupuesto, prestigio, password FROM usuarios WHERE nombre = ?", (manager,))
 if not datos:
     ejecutar_db("INSERT INTO usuarios (nombre, password, presupuesto, prestigio) VALUES (?, ?, 2500000, 15)", (manager, password), commit=True)
+    st.success("¡Cuenta creada exitosamente!")
     st.rerun()
 u_id, presupuesto, prestigio, u_pass = datos[0]
 if password != u_pass:
@@ -90,60 +94,64 @@ if password != u_pass:
 df_oficial = cargar_datos_completos_google()
 
 # --- 5. MERCADO DE FICHAJES ---
-st.sidebar.metric("Caja", f"€ {formatear_total(presupuesto)}")
+st.sidebar.metric("Presupuesto", f"€ {formatear_total(presupuesto)}")
 st.sidebar.metric("Prestigio", f"{prestigio} pts")
 
-with st.expander("🔍 Mercado de Fichajes"):
+with st.expander("🔍 BUSCAR Y FICHAR JUGADORES"):
     if not df_oficial.empty:
-        sel = st.selectbox("Buscar Jugador:", [""] + df_oficial['Display'].tolist())
+        sel = st.selectbox("Selecciona un jugador del mercado:", [""] + df_oficial['Display'].tolist())
         if sel:
             datos_j = df_oficial[df_oficial['Display'] == sel].iloc[0]
             nom, club, pos, costo = datos_j.iloc[0], datos_j.iloc[1], datos_j['Posicion'], datos_j['ValorNum']
-            
             st.write(f"**Posición:** {pos} | **Club:** {club} | **Costo:** € {formatear_total(costo)}")
             
-            if st.button("FICHAR PARA EL EQUIPO"):
+            if st.button("CONFIRMAR FICHAJE"):
                 ya_fichado = ejecutar_db("SELECT id FROM cartera WHERE usuario_id = ? AND nombre_jugador = ?", (u_id, nom))
                 if ya_fichado:
-                    st.warning("Ya tienes a este jugador.")
+                    st.warning("Este jugador ya forma parte de tu plantel.")
                 elif presupuesto >= costo:
                     ejecutar_db("INSERT INTO cartera (usuario_id, nombre_jugador, club, posicion) VALUES (?,?,?,?)", (u_id, nom, club, pos), commit=True)
                     ejecutar_db("UPDATE usuarios SET presupuesto = presupuesto - ? WHERE id = ?", (costo, u_id), commit=True)
-                    st.success(f"¡{nom} se unió a tu equipo!")
+                    st.success(f"¡Fichaje estrella! {nom} se une al equipo.")
                     st.rerun()
                 else:
-                    st.error("Saldo insuficiente.")
+                    st.error("No tienes dinero suficiente para este fichaje.")
 
-# --- 6. CAMPO TÁCTICO (4-2-3-1) ---
-st.subheader("🏟️ Formación Titular (4-2-3-1)")
+# --- 6. CAMPO TÁCTICO (Visualización 4-2-3-1) ---
+st.subheader("🏟️ Alineación Titular")
 
-# Obtener jugadores actuales y organizarlos por posición
 cartera_raw = ejecutar_db("SELECT nombre_jugador, posicion FROM cartera WHERE usuario_id = ?", (u_id,))
 equipo = {"ARQ": [], "DEF": [], "MED": [], "DEL": []}
-for n, p in cartera_raw:
-    for cat in equipo.keys():
-        if cat in p: equipo[cat].append(n)
 
-# Renderizado de la cancha con HTML/CSS dinámico
-st.markdown(f"""
+# Clasificación inteligente de posiciones según tu Excel
+for n, p in cartera_raw:
+    if p:
+        p_up = p.upper()
+        if any(x in p_up for x in ["ARQ", "POR", "GK", "Arquero"]): equipo["ARQ"].append(n)
+        elif any(x in p_up for x in ["DEF", "DFC", "LAT", "DFI", "DFD", "Defensa"]): equipo["DEF"].append(n)
+        elif any(x in p_up for x in ["MED", "MC", "VOL", "MCD", "MCO", "Medio"]): equipo["MED"].append(n)
+        elif any(x in p_up for x in ["DEL", "EXT", "DC", "ATA", "Delantero"]): equipo["DEL"].append(n)
+
+# Construcción de la cancha
+html_cancha = f"""
 <div class="campo-tactico">
     <!-- DELANTERO -->
-    <div style="display: flex; justify-content: center; margin-bottom: 35px;">
+    <div style="display: flex; justify-content: center; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["DEL"], 0)}
     </div>
     <!-- MEDIOS ATAQUE -->
-    <div style="display: flex; justify-content: space-around; margin-bottom: 35px;">
+    <div style="display: flex; justify-content: space-around; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["MED"], 0)}
         {generar_ficha_jugador(equipo["MED"], 1)}
         {generar_ficha_jugador(equipo["MED"], 2)}
     </div>
     <!-- MEDIOS DEFENSA -->
-    <div style="display: flex; justify-content: center; gap: 80px; margin-bottom: 35px;">
+    <div style="display: flex; justify-content: center; gap: 100px; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["MED"], 3)}
         {generar_ficha_jugador(equipo["MED"], 4)}
     </div>
     <!-- DEFENSA -->
-    <div style="display: flex; justify-content: space-around; margin-bottom: 35px;">
+    <div style="display: flex; justify-content: space-around; margin-bottom: 30px;">
         {generar_ficha_jugador(equipo["DEF"], 0)}
         {generar_ficha_jugador(equipo["DEF"], 1)}
         {generar_ficha_jugador(equipo["DEF"], 2)}
@@ -154,15 +162,18 @@ st.markdown(f"""
         {generar_ficha_jugador(equipo["ARQ"], 0)}
     </div>
 </div>
-""", unsafe_allow_html=True)
+"""
+st.markdown(html_cancha, unsafe_allow_html=True)
 
 # --- 7. GESTIÓN DE PLANTEL ---
-with st.expander("📋 Lista de Plantel y Ventas"):
+with st.expander("📋 VER PLANTEL COMPLETO / VENDER JUGADORES"):
     cartera_v = ejecutar_db("SELECT id, nombre_jugador, club, posicion FROM cartera WHERE usuario_id = ?", (u_id,))
+    if not cartera_v:
+        st.write("Tu plantilla está vacía. ¡Ve al mercado!")
     for c_id, n, cl, p in cartera_v:
         col1, col2 = st.columns([4, 1])
-        col1.write(f"**{n}** ({p}) - {cl}")
-        if col2.button("Vender", key=f"v_{c_id}"):
+        col1.write(f"🏃 **{n}** ({p}) - {cl}")
+        if col2.button("Desvincular", key=f"v_{c_id}"):
+            # Al vender, podrías devolver dinero, pero por ahora solo borra
             ejecutar_db("DELETE FROM cartera WHERE id = ?", (c_id,), commit=True)
-            # Recupera el 90% del valor (opcional, basado en df_oficial)
             st.rerun()
