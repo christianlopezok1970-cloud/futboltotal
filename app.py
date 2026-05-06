@@ -98,7 +98,7 @@ with st.sidebar:
         else: st.info("¡Último giro: 0c! 😐")
 
     if st.button("GIRAR RULETA 🎲"):
-        resultado = random.choices([1, -1, -2, 2], weights=[0.25, 0.25, 0.25, 0.25])[0]
+        resultado = random.choices([1, -1, -2, 2, 3, -3, 4, -4, 5, -5], weights=[0.13, 0.07, 0.12, 0.08, 0.11, 0.09, 0.10, 0.10, 0.10, 0.10])[0]
         st.session_state.creditos += resultado
         st.session_state.ultimo_giro = resultado
         st.session_state.historial.insert(0, f"Ruleta: {resultado}c")
