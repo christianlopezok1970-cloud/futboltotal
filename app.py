@@ -72,11 +72,11 @@ def formato_nivel(n):
         return f"{n}★"
     
     # Combinamos tu arreglo de estrellas con los colores pedidos
-    if n == 5: return "🟡 ★★★★★ (ORO)"
-    if n == 4: return "⚪ ★★★★ (PLATA)"
-    if n == 3: return "🟤 ★★★ (BRONCE)"
-    if n == 2: return "⚪ ★★ (BLANCO)"
-    if n == 1: return "🔘 ★ (GRIS)"
+    if n == 5: return "★★★★★"
+    if n == 4: return "★★★★"
+    if n == 3: return "★★★"
+    if n == 2: return "★★"
+    if n == 1: return "★"
     return f"{n}★"
 
 def ordenar_titulares():
