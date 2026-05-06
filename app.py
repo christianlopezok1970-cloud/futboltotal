@@ -28,13 +28,19 @@ if 'suplentes' not in st.session_state:
 if 'historial' not in st.session_state:
     st.session_state.historial = []
 
-# Función para ordenar titulares por jerarquía de posición
+# --- FUNCIONES ---
+
 def ordenar_titulares():
-    if not st.session_state.titulares:
-        return
-    # Definimos el orden lógico del fútbol
     orden_pos = {'ARQ': 0, 'DEF': 1, 'VOL': 2, 'DEL': 3}
     st.session_state.titulares.sort(key=lambda x: orden_pos.get(x['POS'], 99))
+
+def formato_nivel(n):
+    # Formato uniforme: Número + Estrella
+    n = int(n)
+    if n == 5: return "5★ (ORO)"
+    if n == 4: return "4★ (PLATA)"
+    if n == 3: return "3★ (BRONCE)"
+    return f"{n}★"
 
 # --- PANEL LATERAL ---
 with st.sidebar:
@@ -43,94 +49,77 @@ with st.sidebar:
     
     st.divider()
     
-    # RULETA INSTANTÁNEA
-    st.subheader("🎡 Ruleta de Créditos")
-    if st.button("OBTENER RESULTADO 🎲"):
+    st.subheader("🎡 Ruleta Instantánea")
+    if st.button("GIRAR RULETA 🎲"):
         res = random.choices([0, 1, -1, 3], weights=[0.50, 0.25, 0.20, 0.05])[0]
         st.session_state.creditos += res
         st.session_state.historial.insert(0, f"Ruleta: {res}c")
-        if res > 0: st.success(f"Resultado: +{res}")
-        elif res < 0: st.error(f"Resultado: -{abs(res)}")
-        else: st.info("Resultado: 0")
+        if res > 0: st.success(f"+{res} créditos")
+        elif res < 0: st.error(f"{res} crédito")
+        else: st.info("0 créditos")
 
     st.divider()
     
-    # COMPRA
     if st.button("🛒 COMPRAR PACK (100c)"):
         if st.session_state.creditos >= 100:
-            if len(st.session_state.suplentes) < 25:
+            if len(st.session_state.suplentes) <= 23:
                 st.session_state.creditos -= 100
                 nuevos = df_base.sample(n=2).to_dict('records')
                 st.session_state.suplentes.extend(nuevos)
-                st.session_state.historial.insert(0, f"Fichaje: {nuevos[0]['Jugador']} y {nuevos[1]['Jugador']}")
-                st.toast("¡Nuevos jugadores en el banco!")
-            else:
-                st.warning("Banco lleno")
-        else:
-            st.error("Créditos insuficientes")
+                st.session_state.historial.insert(0, f"Pack: {nuevos[0]['Jugador']} y {nuevos[1]['Jugador']}")
+                st.toast("¡Fichajes realizados!")
+            else: st.warning("Banco lleno")
+        else: st.error("Créditos insuficientes")
 
 # --- PANEL PRINCIPAL ---
 st.title("⚽ AFA Manager Pro 2026")
 
-# Sección 1: Titulares ORDENADOS
+# Listado Superior: Titulares
 st.subheader("🔝 Once Titular (1-4-4-2)")
 if st.session_state.titulares:
-    ordenar_titulares() # Llamamos al ordenamiento antes de mostrar
+    ordenar_titulares()
     df_tit = pd.DataFrame(st.session_state.titulares)
-    df_tit['Nivel'] = df_tit['Nivel'].apply(lambda x: "⭐" * int(x))
-    # Mostramos la tabla limpia
+    df_tit['Nivel'] = df_tit['Nivel'].apply(formato_nivel)
     st.table(df_tit[['POS', 'Jugador', 'Equipo', 'Nivel', 'Score']])
     
-    # Dropdown para sacar al banco
-    quitar = st.selectbox("Mandar al banco:", [j['Jugador'] for j in st.session_state.titulares])
-    if st.button("Confirmar salida ⬇️"):
+    quitar = st.selectbox("Quitar titular:", [j['Jugador'] for j in st.session_state.titulares])
+    if st.button("Mandar al banco ⬇️"):
         idx = next(i for i, j in enumerate(st.session_state.titulares) if j['Jugador'] == quitar)
         st.session_state.suplentes.append(st.session_state.titulares.pop(idx))
         st.rerun()
 else:
-    st.info("El 11 titular está vacío.")
+    st.info("Sin titulares.")
 
 st.divider()
 
-# Sección 2: Suplentes
+# Listado Inferior: Suplentes
 st.subheader("⏬ Banco de Suplentes")
 if st.session_state.suplentes:
     df_sup = pd.DataFrame(st.session_state.suplentes)
-    df_sup['Estrellas'] = df_sup['Nivel'].apply(lambda x: "⭐" * int(x))
-    st.dataframe(df_sup[['Jugador', 'POS', 'Estrellas', 'Equipo']], use_container_width=True)
+    df_sup['Nivel_V'] = df_sup['Nivel'].apply(formato_nivel)
+    st.dataframe(df_sup[['Jugador', 'POS', 'Nivel_V', 'Equipo']], use_container_width=True, hide_index=True)
 
     c1, c2 = st.columns(2)
     with c1:
-        st.write("**Subir al 11**")
-        elegido = st.selectbox("Elegir jugador:", [j['Jugador'] for j in st.session_state.suplentes], key="up")
-        if st.button("Poner de Titular ⬆️"):
-            idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == elegido)
+        subir = st.selectbox("Subir al Once:", [j['Jugador'] for j in st.session_state.suplentes], key="s1")
+        if st.button("Confirmar Titular ⬆️"):
+            idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == subir)
             j = st.session_state.suplentes[idx]
-            
-            # Lógica 1-4-4-2
             conteo = [p['POS'] for p in st.session_state.titulares].count(j['POS'])
             limites = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
-            
             if conteo < limites.get(j['POS'], 0):
                 st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
-                ordenar_titulares() # Ordenar inmediatamente
                 st.rerun()
-            else:
-                st.error(f"Ya tienes suficientes jugadores en {j['POS']}.")
+            else: st.error(f"Límite de {j['POS']} alcanzado")
 
     with c2:
-        st.write("**Venta Directa**")
-        v_juego = st.selectbox("Elegir para vender:", [j['Jugador'] for j in st.session_state.suplentes], key="sell")
-        if st.button("VENDER 💰"):
-            idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == v_juego)
-            j_v = st.session_state.suplentes[idx]
-            pago = int(j_v['Nivel']) * 20
+        vender = st.selectbox("Vender jugador:", [j['Jugador'] for j in st.session_state.suplentes], key="s2")
+        if st.button("CONFIRMAR VENTA 💰"):
+            idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == vender)
+            pago = int(st.session_state.suplentes[idx]['Nivel']) * 20
             st.session_state.creditos += pago
             st.session_state.suplentes.pop(idx)
             st.rerun()
-else:
-    st.info("No tienes suplentes.")
 
 with st.expander("📜 Historial"):
-    for h in st.session_state.historial:
-        st.write(h)
+    for h in st.session_state.historial: st.write(f"- {h}")
