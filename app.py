@@ -89,7 +89,7 @@ with st.sidebar:
     st.metric("Presupuesto", f"{st.session_state.creditos} c")
     
     st.divider()
-    st.subheader("🎡 Ruleta de Créditos")
+    st.subheader("🎡 Ruleta")
     
     if st.session_state.ultimo_giro is not None:
         res = st.session_state.ultimo_giro
@@ -119,7 +119,7 @@ with st.sidebar:
 st.title("⚽ AFA Manager Pro 2026")
 
 # Titulares
-st.subheader("🔝 Once Titular (1-4-4-2)")
+st.subheader("🔝 Once Titular")
 if st.session_state.titulares:
     ordenar_titulares()
     df_t = pd.DataFrame(st.session_state.titulares)
@@ -136,7 +136,7 @@ else: st.info("Armá tu equipo con los suplentes.")
 st.divider()
 
 # Suplentes
-st.subheader("⏬ Banco de Suplentes")
+st.subheader("Banco de Suplentes")
 if st.session_state.suplentes:
     df_s = pd.DataFrame(st.session_state.suplentes)
     df_s['Rareza'] = df_s['Nivel'].apply(formato_nivel)
@@ -146,7 +146,7 @@ if st.session_state.suplentes:
     with c1:
         st.write("**Táctica**")
         subir = st.selectbox("Poner de Titular:", [j['Jugador'] for j in st.session_state.suplentes])
-        if st.button("Subir al 11 ⬆️"):
+        if st.button("Subir al 11"):
             idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == subir)
             j = st.session_state.suplentes[idx]
             conteo = [p['POS'] for p in st.session_state.titulares].count(j['POS'])
