@@ -80,11 +80,11 @@ if 'historial' not in st.session_state: st.session_state.historial = []
 def formato_nivel(n):
     try: n = int(n)
     except: return f"{n}★"
-    if n == 5: return "🟡 5★ ORO"
-    if n == 4: return "⚪ 4★ PLATA"
-    if n == 3: return "🟤 3★ BRONCE"
-    if n == 2: return "⚪ 2★ BLANCO"
-    if n == 1: return "🔘 1★ GRIS"
+    if n == 5: return "★★★★★"
+    if n == 4: return "★★★★"
+    if n == 3: return "★★★"
+    if n == 2: return "★★"
+    if n == 1: return "★"
     return f"{n}★"
 
 def ordenar_titulares():
