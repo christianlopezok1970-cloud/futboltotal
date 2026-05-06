@@ -1,166 +1,130 @@
-import streamlit as st
-import sqlite3
 import pandas as pd
-from datetime import datetime
-import io
-from PIL import Image
+import random
 
-# --- 1. CONFIGURACIÓN DE BASE DE DATOS MÉDICA ---
-DB_NAME = 'gestion_medica_v1.db'
+class LigaManagerApp:
+    def __init__(self, csv_url):
+        # 1. Carga de Base de Datos (982 jugadores)
+        try:
+            self.df_base = pd.read_csv(csv_url)
+            self.df_base.columns = [c.strip() for c in self.df_base.columns]
+        except Exception as e:
+            print(f"Error al conectar: {e}")
+            self.df_base = pd.DataFrame()
 
-def ejecutar_db(query, params=(), commit=False):
-    with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
-        c = conn.cursor()
-        c.execute(query, params)
-        if commit: conn.commit()
-        return c.fetchall()
-
-# Creación de tablas profesionales
-ejecutar_db('''CREATE TABLE IF NOT EXISTS pacientes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT,
-                dni TEXT UNIQUE,
-                telefono TEXT,
-                historial_clinico TEXT,
-                fecha_registro TEXT)''', commit=True)
-
-ejecutar_db('''CREATE TABLE IF NOT EXISTS galerias (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paciente_id INTEGER,
-                imagen_data BLOB,
-                descripcion TEXT,
-                fecha TEXT)''', commit=True)
-
-ejecutar_db('''CREATE TABLE IF NOT EXISTS agenda (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paciente_id INTEGER,
-                fecha TEXT,
-                hora TEXT,
-                motivo TEXT)''', commit=True)
-
-# --- 2. ESTILO MÉDICO (AZUL PROFUNDO Y BLANCO) ---
-st.set_page_config(page_title="Medical Suite Pro", layout="wide")
-
-st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(180deg, #002147 0%, #f0f2f6 100%);
-    }
-    .main-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        color: #333;
-        margin-bottom: 20px;
-    }
-    h1, h2, h3 { color: #002147 !important; }
-    .stButton>button {
-        background-color: #004E98;
-        color: white;
-        border-radius: 8px;
-        font-weight: bold;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- 3. LÓGICA DE NAVEGACIÓN ---
-with st.sidebar:
-    st.title("🏥 Medical Suite")
-    menu = st.radio("Menú Principal", ["Agenda Hoy", "Pacientes", "Nueva Ficha"])
-
-# --- 4. SECCIÓN: NUEVA FICHA (CON FOTOS) ---
-if menu == "Nueva Ficha":
-    st.header("📝 Registro de Paciente")
-    with st.container():
-        st.markdown('<div class="main-card">', unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        nombre = col1.text_input("Nombre Completo")
-        dni = col2.text_input("DNI / Identificación")
-        tel = col1.text_input("Teléfono")
-        notas = st.text_area("Antecedentes y Notas Médicas")
+        self.creditos = 0
+        self.historial = []
         
-        st.subheader("📸 Capturas Clínicas (JPG)")
-        archivos_fotos = st.file_uploader("Subir imágenes", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
-        
-        if st.button("Guardar Paciente"):
-            if nombre and dni:
-                # Guardar paciente
-                ejecutar_db("INSERT INTO pacientes (nombre, dni, telefono, historial_clinico, fecha_registro) VALUES (?,?,?,?,?)",
-                           (nombre, dni, tel, notas, datetime.now().strftime("%Y-%m-%d")), commit=True)
-                
-                # Obtener ID del paciente recién creado
-                p_id = ejecutar_db("SELECT id FROM pacientes WHERE dni = ?", (dni,))[0][0]
-                
-                # Guardar fotos
-                for archivo in archivos_fotos:
-                    blob_data = archivo.read()
-                    ejecutar_db("INSERT INTO galerias (paciente_id, imagen_data, descripcion, fecha) VALUES (?,?,?,?)",
-                               (p_id, blob_data, "Captura inicial", datetime.now().strftime("%Y-%m-%d")), commit=True)
-                
-                st.success(f"Ficha de {nombre} creada con éxito.")
-        st.markdown('</div>', unsafe_allow_html=True)
+        # 2. Plantilla 1-4-4-2 (Listado Superior)
+        self.titulares = {
+            'ARQ': [None],
+            'DEF': [None, None, None, None],
+            'VOL': [None, None, None, None],
+            'DEL': [None, None]
+        }
+        # 3. Banco (Listado Inferior - Máx 25)
+        self.suplentes = [] 
 
-# --- 5. SECCIÓN: AGENDA VISUAL SIMPLE ---
-elif menu == "Agenda Hoy":
-    st.header("📅 Agenda de Citas")
-    
-    col_cal, col_list = st.columns([1, 2])
-    
-    with col_cal:
-        fecha_sel = st.date_input("Seleccionar Fecha", datetime.now())
-    
-    with col_list:
-        st.subheader(f"Citas para el {fecha_sel}")
-        citas = ejecutar_db("""
-            SELECT a.hora, p.nombre, a.motivo 
-            FROM agenda a JOIN pacientes p ON a.paciente_id = p.id 
-            WHERE a.fecha = ? ORDER BY a.hora ASC""", (fecha_sel.strftime("%Y-%m-%d"),))
-        
-        if not citas:
-            st.info("No hay citas programadas.")
-        else:
-            for hora, p_nom, motivo in citas:
-                with st.container():
-                    st.markdown(f"""
-                        <div style="background:white; padding:10px; border-left:5px solid #004E98; margin-bottom:10px; border-radius:5px;">
-                            <span style="font-weight:bold; color:#002147;">{hora}</span> - {p_nom} <br>
-                            <small style="color:gray;">Motivo: {motivo}</small>
-                        </div>
-                    """, unsafe_allow_html=True)
+    # --- RULETA DE AZAR (50% 0, 25% +1, 20% -1, 5% +3) ---
+    def girar_ruleta(self):
+        opciones = [0, 1, -1, 3]
+        pesos = [0.50, 0.25, 0.20, 0.05]
+        resultado = random.choices(opciones, weights=pesos, k=1)[0]
+        self.creditos += resultado
+        # Registro con formato visual
+        simbolo = "✨" if resultado > 0 else ("💀" if resultado < 0 else "💨")
+        self.registrar_movimiento(f"{simbolo} Ruleta: {resultado}c (Total: {self.creditos}c)")
+        return resultado
 
-    # Botón para agendar nueva cita
-    with st.expander("➕ Programar nueva cita"):
-        todos_pacientes = ejecutar_db("SELECT id, nombre FROM pacientes")
-        dict_p = {p[1]: p[0] for p in todos_pacientes}
-        p_cita = st.selectbox("Paciente", options=list(dict_p.keys()))
-        f_cita = st.date_input("Fecha", key="f_cita")
-        h_cita = st.time_input("Hora")
-        m_cita = st.text_input("Motivo")
+    # --- TIENDA CON DOBLE SEGURIDAD ---
+    def comprar_pack(self, confirmacion=False):
+        if not confirmacion: 
+            return "⚠️ Debes confirmar la compra de 100 créditos."
         
-        if st.button("Confirmar Cita"):
-            ejecutar_db("INSERT INTO agenda (paciente_id, fecha, hora, motivo) VALUES (?,?,?,?)",
-                       (dict_p[p_cita], f_cita.strftime("%Y-%m-%d"), h_cita.strftime("%H:%M"), m_cita), commit=True)
-            st.rerun()
+        if self.creditos >= 100:
+            if len(self.suplentes) + 2 > 25:
+                return "❌ Banco lleno. Vende jugadores antes de comprar."
+            
+            self.creditos -= 100
+            # Sorteo de la base de datos real
+            nuevos = self.df_base.sample(n=2).to_dict('records')
+            self.suplentes.extend(nuevos)
+            
+            for j in nuevos:
+                self.registrar_movimiento(f"📦 Ojeo: {j['Jugador']} [{j['Equipo']}]")
+            return "✅ Pack abierto con éxito."
+        return "❌ Créditos insuficientes."
 
-# --- 6. SECCIÓN: BUSCADOR DE PACIENTES ---
-elif menu == "Pacientes":
-    st.header("🔍 Buscador de Pacientes")
-    busqueda = st.text_input("Ingresa nombre o DNI")
-    
-    if busqueda:
-        resultados = ejecutar_db("SELECT id, nombre, dni, historial_clinico FROM pacientes WHERE nombre LIKE ? OR dni LIKE ?", 
-                                (f'%{busqueda}%', f'%{busqueda}%'))
+    # --- GESTIÓN DE POSICIONES (Mandar al Banco / Mandar a Titular) ---
+    def mandar_a_titulares(self, index_suplente):
+        jugador = self.suplentes[index_suplente]
+        posicion = jugador['POS']
         
-        for p_id, p_nom, p_dni, p_hist in resultados:
-            with st.expander(f"👤 {p_nom} (DNI: {p_dni})"):
-                st.write(f"**Historial:** {p_hist}")
-                
-                # Mostrar fotos del paciente
-                fotos = ejecutar_db("SELECT imagen_data, fecha FROM galerias WHERE paciente_id = ?", (p_id,))
-                if fotos:
-                    st.subheader("Galería de Imágenes")
-                    cols = st.columns(3)
-                    for idx, (img_blob, f_img) in enumerate(fotos):
-                        img = Image.open(io.BytesIO(img_blob))
-                        cols[idx % 3].image(img, caption=f"Fecha: {f_img}", use_container_width=True)
+        # Buscar lugar vacío en la posición correspondiente
+        if posicion in self.titulares:
+            for i, slot in enumerate(self.titulares[posicion]):
+                if slot is None:
+                    self.titulares[posicion][i] = jugador
+                    self.suplentes.pop(index_suplente)
+                    self.registrar_movimiento(f"⬆️ {jugador['Jugador']} subió al 11 Titular.")
+                    return True
+            return f"❌ Ya tienes todos los slots de {posicion} ocupados."
+        return "❌ Posición no reconocida."
+
+    def mandar_al_banco(self, pos, index_titular):
+        jugador = self.titulares[pos][index_titular]
+        if jugador:
+            if len(self.suplentes) < 25:
+                self.suplentes.append(jugador)
+                self.titulares[pos][index_titular] = None
+                self.registrar_movimiento(f"⬇️ {jugador['Jugador']} regresó al Banco.")
+                return True
+            return "❌ Banco lleno, no puede bajar."
+        return "❌ No hay nadie en esa posición."
+
+    # --- VENTA CON DOBLE SEGURIDAD (20c x Estrella) ---
+    def vender_suplente(self, index_suplente, confirmacion=False):
+        if not confirmacion:
+            return "⚠️ Confirmación requerida para vender."
+        
+        jugador = self.suplentes.pop(index_suplente)
+        ganancia = jugador['Nivel'] * 20
+        self.creditos += ganancia
+        self.registrar_movimiento(f"💰 VENTA: {jugador['Jugador']} por {ganancia}c.")
+        return ganancia
+
+    def registrar_movimiento(self, texto):
+        self.historial.append(texto)
+
+    # --- RENDERIZADO DE INTERFAZ ---
+    def mostrar_interfaz(self):
+        print(f"\n{'='*70}")
+        print(f"💰 CRÉDITOS: {self.creditos} | 👤 USUARIO: MANAGER_01")
+        print(f"{'='*70}")
+        
+        print("\n🔝 LISTADO SUPERIOR (TITULARES 1-4-4-2)")
+        for pos, lista in self.titulares.items():
+            for i, j in enumerate(lista):
+                if j:
+                    estrellas = "⭐" * int(j['Nivel'])
+                    print(f"   [{pos}] {j['Jugador']} | {j['Equipo']} | {estrellas} | Score: {j['Score']}")
+                else:
+                    print(f"   [{pos}] --- VACANTE ---")
+        
+        print("\n\n⏬ LISTADO INFERIOR (BANCO - MÁX 25)")
+        for i, j in enumerate(self.suplentes):
+            estrellas = "⭐" * int(j['Nivel'])
+            print(f"   {i}. {j['Jugador']} ({j['POS']}) | {j['Equipo']} | {estrellas} | [BOTÓN VENDER]")
+
+        print(f"\n{'*'*70}\n📜 HISTORIAL DE MOVIMIENTOS")
+        for mov in self.historial[-4:]:
+            print(f" > {mov}")
+        print(f"{'*'*70}")
+
+# --- INICIALIZACIÓN ---
+URL_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2VmykJ-6g-KVHVS3doLPVdxGA09KgOByjy67lnJW-VlJxLWgukpKAUM1PmeTOKbPtH1fNDSUyCBTO/pub?output=csv"
+app = LigaManagerApp(URL_CSV)
+
+# Ejemplo de uso:
+# app.creditos = 100
+# app.comprar_pack(confirmacion=True)
+# app.mostrar_interfaz()
