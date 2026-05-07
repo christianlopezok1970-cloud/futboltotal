@@ -27,15 +27,16 @@ def guardar_json(archivo, datos):
 
 def guardar_progreso():
     """Guarda el estado actual del usuario en el archivo de partidas."""
-    partidas = cargar_json(DB_PARTIDAS, {})
-    user = st.session_state.usuario
-    partidas[user] = {
-        "monedas": st.session_state.monedas,
-        "titulares": st.session_state.titulares,
-        "suplentes": st.session_state.suplentes,
-        "historial": st.session_state.historial
-    }
-    guardar_json(DB_PARTIDAS, partidas)
+    if 'usuario' in st.session_state and st.session_state.autenticado:
+        partidas = cargar_json(DB_PARTIDAS, {})
+        user = st.session_state.usuario
+        partidas[user] = {
+            "monedas": st.session_state.monedas,
+            "titulares": st.session_state.titulares,
+            "suplentes": st.session_state.suplentes,
+            "historial": st.session_state.historial
+        }
+        guardar_json(DB_PARTIDAS, partidas)
 
 # --- 3. LOGIN Y REGISTRO ---
 if 'autenticado' not in st.session_state:
@@ -63,13 +64,13 @@ if not st.session_state.autenticado:
                     st.session_state.usuario = u
                 
                 if st.session_state.autenticado:
-                    # Cargar partida grabada o iniciar nueva
+                    # CARGA INICIAL DE DATOS PARA EVITAR ATTRIBUTE ERROR
                     partidas = cargar_json(DB_PARTIDAS, {})
-                    progreso = partidas.get(u, {
+                    progreso = partidas.get(st.session_state.usuario, {
                         "monedas": 1000,
                         "titulares": [],
                         "suplentes": [],
-                        "historial": []
+                        "historial": ["¡Bienvenido al Manager!"]
                     })
                     st.session_state.monedas = progreso["monedas"]
                     st.session_state.titulares = progreso["titulares"]
@@ -78,7 +79,7 @@ if not st.session_state.autenticado:
                     st.rerun()
     st.stop()
 
-# --- 4. CARGA DE DATOS ---
+# --- 4. CARGA DE DATOS DE JUGADORES ---
 @st.cache_data
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2VmykJ-6g-KVHVS3doLPVdxGA09KgOByjy67lnJW-VlJxLWgukpKAUM1PmeTOKbPtH1fNDSUyCBTO/pub?output=csv"
@@ -106,9 +107,10 @@ def ordenar_titulares():
     orden = {'ARQ': 0, 'DEF': 1, 'VOL': 2, 'DEL': 3}
     st.session_state.titulares.sort(key=lambda x: orden.get(x['POS'], 99))
 
-# --- 6. PANEL LATERAL (SIDEBAR) ---
+# --- 6. PANEL LATERAL ---
 with st.sidebar:
     st.write(f"🎮 **Manager:** {st.session_state.usuario}")
+    # Aquí ya no dará error porque las monedas se cargan en el login
     st.metric("Presupuesto", f"{st.session_state.monedas} 🪙")
     
     if st.button("Cerrar Sesión"):
@@ -124,7 +126,7 @@ with st.sidebar:
                 nuevo = df_base.sample(n=1).to_dict('records')[0]
                 st.session_state.suplentes.append(nuevo)
                 st.session_state.historial.insert(0, f"Fichaje: {nuevo['Jugador']}")
-                guardar_progreso() # Graba en el archivo
+                guardar_progreso()
                 st.toast(f"¡{nuevo['Jugador']} fichado!")
                 st.rerun()
             else:
@@ -135,7 +137,7 @@ with st.sidebar:
 # --- 7. CUERPO PRINCIPAL ---
 st.title("⚽ AFA Manager Pro 2026")
 
-# Titulares
+# Una vez autenticado, mostrar las tablas
 st.subheader("🔝 Once Titular (1-4-4-2)")
 if st.session_state.titulares:
     ordenar_titulares()
@@ -154,7 +156,6 @@ else:
 
 st.divider()
 
-# Suplentes
 st.subheader("⏬ Banco de Suplentes")
 if st.session_state.suplentes:
     df_s = pd.DataFrame(st.session_state.suplentes)
