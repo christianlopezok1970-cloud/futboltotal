@@ -32,7 +32,7 @@ def guardar_progreso():
         }
         guardar_json(DB_PARTIDAS, partidas)
 
-# --- 3. LOGIN / REGISTRO ---
+# --- 3. LOGIN ---
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
@@ -74,13 +74,16 @@ def load_data():
     try:
         df = pd.read_csv(url)
         df.columns = [c.strip() for c in df.columns]
+        # Limpiar Score: si es NaN o <= 0, poner 50 por defecto
+        df['Score'] = pd.to_numeric(df['Score'], errors='coerce').fillna(50)
+        df.loc[df['Score'] <= 0, 'Score'] = 50
         return df
     except:
         return pd.DataFrame(columns=["Jugador", "POS", "Nivel", "Equipo", "Score"])
 
 df_base = load_data()
 
-# --- 5. FORMATO DE ESTRELLAS (PEDIDO) ---
+# --- 5. FORMATO ---
 def formato_nivel(n):
     try: n = int(n)
     except: return f"{n}★"
@@ -121,7 +124,46 @@ with st.sidebar:
 # --- 7. PANEL PRINCIPAL ---
 st.title("⚽ AFA Manager Pro 2026")
 
-# TABLA TITULARES
+# --- LÓGICA DE PREMIOS POR SUMATORIA ---
+st.subheader("🏆 Premiación de Jornada")
+if len(st.session_state.titulares) == 11:
+    ganancia_total = 0
+    detalles = []
+    
+    for j in st.session_state.titulares:
+        sc = float(j.get('Score', 50))
+        if sc >= 65:
+            puntos_ganados = int((sc - 64) * 3)
+        else:
+            puntos_ganados = int(sc - 65) # Dará negativo: 64 -> -1, etc.
+        
+        ganancia_total += puntos_ganados
+        detalles.append(f"{j['Jugador']} ({sc} pts): {'+' if puntos_ganados > 0 else ''}{puntos_ganados}")
+
+    col1, col2 = st.columns([2,1])
+    col1.write(f"Balance de la jornada: **{'+' if ganancia_total > 0 else ''}{ganancia_total} 🪙**")
+    
+    with col1.expander("Ver desglose por jugador"):
+        for d in detalles: st.write(d)
+
+    if col2.button("COBRAR RECOMPENSA 💰"):
+        st.session_state.monedas += ganancia_total
+        # Evitar monedas negativas si el balance fue muy malo
+        if st.session_state.monedas < 0: st.session_state.monedas = 0
+        
+        st.session_state.historial.insert(0, f"Balance Jornada: {ganancia_total} 🪙")
+        guardar_progreso()
+        if ganancia_total >= 0:
+            st.success(f"¡Ganaste {ganancia_total} 🪙!")
+        else:
+            st.error(f"Perdiste {abs(ganancia_total)} 🪙 por bajo rendimiento.")
+        st.rerun()
+else:
+    st.info("Forma tu 11 titular para calcular la ganancia de la jornada.")
+
+st.divider()
+
+# --- TABLAS ---
 st.subheader("🔝 Once Titular (1-4-4-2)")
 if st.session_state.titulares:
     ordenar_titulares()
@@ -135,11 +177,9 @@ if st.session_state.titulares:
         st.session_state.suplentes.append(st.session_state.titulares.pop(idx))
         guardar_progreso()
         st.rerun()
-else: st.info("Selecciona jugadores del banco para armar tu equipo.")
 
 st.divider()
 
-# TABLA SUPLENTES
 st.subheader("⏬ Banco de Suplentes")
 if st.session_state.suplentes:
     df_s = pd.DataFrame(st.session_state.suplentes)
@@ -159,24 +199,18 @@ if st.session_state.suplentes:
                 st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
                 guardar_progreso()
                 st.rerun()
-            else: st.error(f"Límite de {j['POS']} alcanzado.")
+            else: st.error(f"Límite alcanzado.")
 
     with c2:
         st.write("**Ventas**")
-        vender_nombre = st.selectbox("Vender Jugador:", [j['Jugador'] for j in st.session_state.suplentes], key="v_sup")
-        
-        # Cálculo de precio para mostrar antes de vender
-        idx_v = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == vender_nombre)
+        vender_n = st.selectbox("Vender Jugador:", [j['Jugador'] for j in st.session_state.suplentes], key="v_sup")
+        idx_v = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == vender_n)
         precio = int(st.session_state.suplentes[idx_v]['Nivel']) * 20
-        
-        st.info(f"Valor de reventa: **{precio} 🪙**")
-        
-        if st.button("VENDER AHORA 💰"):
+        st.info(f"Precio: {precio} 🪙")
+        if st.button("VENDER 💰"):
             st.session_state.monedas += precio
-            st.session_state.historial.insert(0, f"Venta: {vender_nombre} (+{precio} 🪙)")
             st.session_state.suplentes.pop(idx_v)
             guardar_progreso()
-            st.toast(f"Vendido por {precio} 🪙")
             st.rerun()
 
 with st.expander("📜 Ver Historial"):
