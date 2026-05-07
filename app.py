@@ -96,11 +96,11 @@ df_base = load_data()
 def formato_nivel(n):
     try: n = int(n)
     except: return f"{n}★"
-    if n == 5: return "🟡 ★★★★★ (ORO)"
-    if n == 4: return "⚪ ★★★★ (PLATA)"
-    if n == 3: return "🟤 ★★★ (BRONCE)"
-    if n == 2: return "⚪ ★★ (BLANCO)"
-    if n == 1: return "🔘 ★ (GRIS)"
+    if n == 5: return "★★★★★"
+    if n == 4: return "★★★★"
+    if n == 3: return "★★★"
+    if n == 2: return "★★"
+    if n == 1: return "★"
     return f"{n}★"
 
 def ordenar_titulares():
