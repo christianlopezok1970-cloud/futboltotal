@@ -86,7 +86,7 @@ for lista in [st.session_state.titulares, st.session_state.suplentes]:
             j['Score'], j['Nivel'] = float(match.iloc[0]['Score']), int(match.iloc[0]['Nivel'])
 
 # --- 5. PANEL PRINCIPAL ---
-st.markdown("### ⚽ Futbol Total")
+st.markdown("### ⚽ VIRTUAL DT")
 
 # --- PRESUPUESTO Y RECOMPENSA (Tamaño ajustado) ---
 c_pres, c_recom = st.columns(2)
