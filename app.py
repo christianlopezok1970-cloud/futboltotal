@@ -46,9 +46,7 @@ with st.sidebar:
     archivo = st.file_uploader("Cargar Partida (.json)", type="json")
     if archivo:
         data = json.load(archivo)
-        st.session_state.usuario, st.session_state.monedas = data['usuario'], data['monedas']
-        st.session_state.titulares, st.session_state.suplentes = data['titulares'], data['suplentes']
-        st.session_state.historial = data['historial']
+        st.session_state.update(data)
         st.session_state.autenticado = True
 
     if not st.session_state.autenticado:
@@ -73,53 +71,69 @@ with st.sidebar:
 
 if not st.session_state.autenticado: st.stop()
 
-# --- 5. LÓGICA DE JUEGO ---
-st.title(f"⚽ AFA Manager: {st.session_state.usuario}")
-
-# Sincronizar con Excel
+# Sincronizar datos
 for lista in [st.session_state.titulares, st.session_state.suplentes]:
     for j in lista:
         match = df_base[df_base['Jugador'] == j['Jugador']]
         if not match.empty:
             j['Score'], j['Nivel'] = float(match.iloc[0]['Score']), int(match.iloc[0]['Nivel'])
 
-# --- FORMACIÓN 1-4-4-2 ---
-st.subheader("🔝 Once Titular (Esquema 1-4-4-2)")
+# --- 5. PANEL PRINCIPAL ---
+st.title(f"🥅 Campo de Juego: 1-4-4-2")
+
+# --- RESUMEN DE PUNTAJES ---
 if st.session_state.titulares:
-    df_t = pd.DataFrame(st.session_state.titulares)
-    df_t['Rango'] = df_t['Nivel'].apply(formato_estrellas)
-    st.dataframe(df_t[['POS', 'Jugador', 'Equipo', 'Score', 'Rango']], use_container_width=True, hide_index=True)
-    
-    q = st.selectbox("Bajar al banco:", [j['Jugador'] for j in st.session_state.titulares])
-    if st.button("⬇️ Mandar al Banco"):
-        idx = next(i for i, j in enumerate(st.session_state.titulares) if j['Jugador'] == q)
-        st.session_state.suplentes.append(st.session_state.titulares.pop(idx))
-        st.rerun()
-
-# --- PREMIOS ---
-if len(st.session_state.titulares) == 11:
+    suma_pts = sum([j['Score'] for j in st.session_state.titulares])
     ganancia = sum([int((j['Score']-64)*3) if j['Score']>=65 else int(j['Score']-65) for j in st.session_state.titulares])
-    st.success(f"¡Equipo Completo! Ganancia Jornada: **{ganancia} 🪙**")
-    if st.button("COBRAR RECOMPENSA"):
-        st.session_state.monedas += ganancia
-        st.rerun()
+    
+    c1, c2 = st.columns(2)
+    c1.metric("Puntaje Total", f"{suma_pts:.1f} pts")
+    if len(st.session_state.titulares) == 11:
+        c2.metric("Balance Jornada", f"{ganancia} 🪙")
+        if st.button("💰 COBRAR RECOMPENSA"):
+            st.session_state.monedas += ganancia
+            st.rerun()
+    else:
+        c2.warning(f"Faltan {11 - len(st.session_state.titulares)} jugadores")
 
-# --- SUPLENTES Y REGLAS ---
+# --- LISTADOS SEPARADOS POR POSICIÓN ---
+st.divider()
+posiciones_orden = ["ARQ", "DEF", "VOL", "DEL"]
+titulares_df = pd.DataFrame(st.session_state.titulares) if st.session_state.titulares else pd.DataFrame()
+
+cols = st.columns(4)
+for i, pos in enumerate(posiciones_orden):
+    with cols[i]:
+        st.markdown(f"### {pos}")
+        if not titulares_df.empty:
+            df_pos = titulares_df[titulares_df['POS'] == pos]
+            if not df_pos.empty:
+                for _, jug in df_pos.iterrows():
+                    with st.expander(f"{jug['Jugador']}"):
+                        st.write(f"{jug['Equipo']} | {formato_estrellas(jug['Nivel'])}")
+                        st.write(f"Score: {jug['Score']}")
+                        if st.button("⬇️ Bajar", key=f"b_{jug['Jugador']}"):
+                            idx = next(idx for idx, j in enumerate(st.session_state.titulares) if j['Jugador'] == jug['Jugador'])
+                            st.session_state.suplentes.append(st.session_state.titulares.pop(idx))
+                            st.rerun()
+            else: st.caption("Vacío")
+        else: st.caption("Vacío")
+
+# --- BANCO DE SUPLENTES Y VENTAS ---
 st.divider()
 st.subheader("⏬ Banco de Suplentes")
 if st.session_state.suplentes:
     df_s = pd.DataFrame(st.session_state.suplentes)
     df_s['Rango'] = df_s['Nivel'].apply(formato_estrellas)
-    st.dataframe(df_s[['Jugador', 'POS', 'Rango', 'Equipo']], use_container_width=True, hide_index=True)
+    st.dataframe(df_s[['Jugador', 'POS', 'Rango', 'Equipo', 'Score']], use_container_width=True, hide_index=True)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        s = st.selectbox("Subir al Once:", [j['Jugador'] for j in st.session_state.suplentes])
+    col_subir, col_vender = st.columns(2)
+    with col_subir:
+        s = st.selectbox("Elegir para subir:", [j['Jugador'] for j in st.session_state.suplentes])
         if st.button("⬆️ Subir al 11"):
             idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == s)
             jug = st.session_state.suplentes[idx]
             
-            # REGLAS 1-4-4-2
             limites = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
             actual = [p['POS'] for p in st.session_state.titulares].count(jug['POS'])
             
@@ -127,10 +141,10 @@ if st.session_state.suplentes:
                 st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
                 st.rerun()
             else:
-                st.error(f"No podés subir más {jug['POS']}. Cupo lleno para el 1-4-4-2.")
+                st.error(f"Cupo lleno para {jug['POS']} (Máximo {limites.get(jug['POS'])})")
 
-    with c2:
-        v = st.selectbox("Vender:", [j['Jugador'] for j in st.session_state.suplentes])
+    with col_vender:
+        v = st.selectbox("Elegir para vender:", [j['Jugador'] for j in st.session_state.suplentes], key="v_sel")
         idx_v = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == v)
         precio = int(st.session_state.suplentes[idx_v]['Nivel']) * 20
         if st.button(f"💰 VENDER POR {precio} 🪙"):
