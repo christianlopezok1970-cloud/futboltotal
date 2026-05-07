@@ -1,234 +1,138 @@
 import streamlit as st
 import pandas as pd
-import random
-import os
 import json
+import base64
+import io
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="AFA Manager 2026", layout="wide")
 
-DB_USERS = "usuarios_db.json"
-DB_PARTIDAS = "partidas_db.json"
+# --- 2. FUNCIONES DE GUARDADO MANUAL (SOLUCIÓN SEGURA) ---
+def exportar_partida():
+    """Crea un link de descarga para el archivo de partida"""
+    datos = {
+        "usuario": st.session_state.usuario,
+        "monedas": st.session_state.monedas,
+        "titulares": st.session_state.titulares,
+        "suplentes": st.session_state.suplentes,
+        "historial": st.session_state.historial
+    }
+    # Convertimos a JSON y luego a Base64 para el link
+    json_str = json.dumps(datos, indent=4)
+    b64 = base64.b64encode(json_str.encode()).decode()
+    nombre_archivo = f"partida_{st.session_state.usuario}.json"
+    return f'<a href="data:file/json;base64,{b64}" download="{nombre_archivo}" style="text-decoration:none; background-color:#4CAF50; color:white; padding:10px; border-radius:5px;">💾 DESCARGAR MI PARTIDA</a>'
 
-# --- 2. PERSISTENCIA (CORREGIDA PARA EVITAR TYPEERROR) ---
-def cargar_json(archivo, defecto):
-    if os.path.exists(archivo):
-        try:
-            with open(archivo, "r") as f: return json.load(f)
-        except: return defecto
-    return defecto
-
-def serializar_datos(obj):
-    """Convierte tipos de datos de Pandas/Numpy a tipos nativos de Python para JSON."""
-    if isinstance(obj, (list, tuple)):
-        return [serializar_datos(i) for i in obj]
-    if isinstance(obj, dict):
-        return {k: serializar_datos(v) for k, v in obj.items()}
-    if hasattr(obj, "item"): # Esto detecta tipos de numpy/pandas (int64, float64)
-        return obj.item()
-    return obj
-
-def guardar_json(archivo, datos):
-    # Limpiamos los datos antes de guardar para que JSON no de error
-    datos_limpios = serializar_datos(datos)
-    with open(archivo, "w") as f: 
-        json.dump(datos_limpios, f)
-
-def guardar_progreso():
-    if 'usuario' in st.session_state and st.session_state.autenticado:
-        partidas = cargar_json(DB_PARTIDAS, {})
-        partidas[st.session_state.usuario] = {
-            "monedas": st.session_state.monedas,
-            "titulares": st.session_state.titulares,
-            "suplentes": st.session_state.suplentes,
-            "historial": st.session_state.historial
-        }
-        guardar_json(DB_PARTIDAS, partidas)
-
-# --- 3. LOGIN / REGISTRO ---
+# --- 3. INICIO DE SESIÓN / CARGA ---
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 
+with st.sidebar:
+    st.title("🛡️ SESIÓN")
+    
+    # OPCIÓN A: SUBIR ARCHIVO
+    archivo_partida = st.file_uploader("Subir archivo de partida (.json)", type="json")
+    if archivo_partida:
+        try:
+            data = json.load(archivo_partida)
+            st.session_state.usuario = data['usuario']
+            st.session_state.monedas = data['monedas']
+            st.session_state.titulares = data['titulares']
+            st.session_state.suplentes = data['suplentes']
+            st.session_state.historial = data['historial']
+            st.session_state.autenticado = True
+            st.success("¡Partida cargada!")
+        except:
+            st.error("Archivo de partida inválido")
+
+    # OPCIÓN B: NUEVA PARTIDA (Si no subió nada)
+    if not st.session_state.autenticado:
+        u = st.text_input("Nombre de Usuario").strip()
+        if st.button("Iniciar Nueva Partida"):
+            if u:
+                st.session_state.usuario = u
+                st.session_state.monedas = 1000
+                st.session_state.titulares = []
+                st.session_state.suplentes = []
+                st.session_state.historial = ["Partida creada"]
+                st.session_state.autenticado = True
+                st.rerun()
+
 if not st.session_state.autenticado:
-    with st.sidebar:
-        st.title("🛡️ ACCESO / REGISTRO")
-        u = st.text_input("Usuario").strip()
-        p = st.text_input("Contraseña", type="password")
-        if st.button("Ingresar / Crear Cuenta"):
-            if u and p:
-                usuarios = cargar_json(DB_USERS, {"admin": "1234"})
-                if u in usuarios:
-                    if usuarios[u] == p:
-                        st.session_state.autenticado = True
-                        st.session_state.usuario = u
-                    else: st.error("Clave incorrecta.")
-                else:
-                    usuarios[u] = p
-                    guardar_json(DB_USERS, usuarios)
-                    st.session_state.autenticado = True
-                    st.session_state.usuario = u
-                
-                if st.session_state.autenticado:
-                    partidas = cargar_json(DB_PARTIDAS, {})
-                    progreso = partidas.get(st.session_state.usuario, {
-                        "monedas": 1000, "titulares": [], "suplentes": [], "historial": []
-                    })
-                    st.session_state.monedas = progreso.get("monedas", 1000)
-                    st.session_state.titulares = progreso.get("titulares", [])
-                    st.session_state.suplentes = progreso.get("suplentes", [])
-                    st.session_state.historial = progreso.get("historial", [])
-                    st.rerun()
+    st.info("Sube tu archivo de partida o inicia una nueva desde el panel lateral.")
     st.stop()
 
-# --- 4. CARGA DE DATOS ---
+# --- 4. CARGA DE DATOS (EXCEL PÚBLICO) ---
 @st.cache_data
-def load_data():
+def load_market():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2VmykJ-6g-KVHVS3doLPVdxGA09KgOByjy67lnJW-VlJxLWgukpKAUM1PmeTOKbPtH1fNDSUyCBTO/pub?output=csv"
-    try:
-        df = pd.read_csv(url)
-        df.columns = [c.strip() for c in df.columns]
-        # Si el Score falla o es 0, poner 50 por defecto
-        df['Score'] = pd.to_numeric(df['Score'], errors='coerce').fillna(50)
-        return df
-    except:
-        return pd.DataFrame(columns=["Jugador", "POS", "Nivel", "Equipo", "Score"])
+    df = pd.read_csv(url)
+    df.columns = [c.strip() for c in df.columns]
+    df['Score'] = pd.to_numeric(df['Score'], errors='coerce').fillna(50)
+    return df
 
-df_base = load_data()
+df_base = load_market()
 
-# --- 5. FORMATO ---
-def formato_nivel(n):
-    try: n = int(n)
-    except: return "★"
-    if n == 5: return "★★★★★"
-    if n == 4: return "★★★★"
-    if n == 3: return "★★★"
-    if n == 2: return "★★"
-    return "★"
-
-def ordenar_titulares():
-    orden = {'ARQ': 0, 'DEF': 1, 'VOL': 2, 'DEL': 3}
-    st.session_state.titulares.sort(key=lambda x: orden.get(x['POS'], 99))
-
-# --- 6. SIDEBAR ---
+# --- 5. PANEL DE CONTROL (MERCADO) ---
 with st.sidebar:
-    st.write(f"🎮 **Manager:** {st.session_state.usuario}")
+    st.divider()
+    st.write(f"🎮 **Agente:** {st.session_state.usuario}")
     st.metric("Presupuesto", f"{st.session_state.monedas} 🪙")
     
-    if st.button("Cerrar Sesión"):
-        st.session_state.autenticado = False
-        st.rerun()
-
-    st.divider()
-    st.subheader("🛒 Mercado")
-    if st.button("FICHAR JUGADOR (50 🪙)"):
+    if st.button("🛒 FICHAR JUGADOR (50 🪙)"):
         if st.session_state.monedas >= 50:
-            if len(st.session_state.suplentes) < 30:
-                st.session_state.monedas -= 50
-                nuevo = df_base.sample(n=1).to_dict('records')[0]
-                st.session_state.suplentes.append(nuevo)
-                st.session_state.historial.insert(0, f"Fichaje: {nuevo['Jugador']}")
-                guardar_progreso()
-                st.toast(f"¡{nuevo['Jugador']} fichado!")
-                st.rerun()
-            else: st.warning("Banco lleno")
-        else: st.error("No tienes suficientes 🪙")
+            st.session_state.monedas -= 50
+            nuevo = df_base.sample(n=1).to_dict('records')[0]
+            st.session_state.suplentes.append(nuevo)
+            st.session_state.historial.insert(0, f"Fichaje: {nuevo['Jugador']}")
+            st.rerun()
+        else: st.error("No hay monedas")
+    
+    st.divider()
+    # EL BOTÓN DE SALVAR VIDA
+    st.markdown(exportar_partida(), unsafe_allow_html=True)
+    st.caption("⚠️ Descarga este archivo antes de cerrar la app para no perder tu progreso.")
 
-# --- 7. PANEL PRINCIPAL ---
+# --- 6. LÓGICA DE JUEGO (TABLAS Y PREMIOS) ---
 st.title("⚽ AFA Manager Pro 2026")
 
-# --- PREMIACIÓN ---
-st.subheader("🏆 Premiación de Jornada")
+# Premiación
 if len(st.session_state.titulares) == 11:
-    ganancia_total = 0
-    detalles = []
-    
+    st.subheader("🏆 Premiación Jornada")
+    ganancia = 0
     for j in st.session_state.titulares:
-        match = df_base[df_base['Jugador'] == j['Jugador']]
-        sc = float(match.iloc[0]['Score']) if not match.empty else 50.0
-        
-        if sc >= 65:
-            p_ganados = int((sc - 64) * 3)
-        else:
-            p_ganados = int(sc - 65)
-            
-        ganancia_total += p_ganados
-        detalles.append(f"{j['Jugador']} ({int(sc)} pts): {'+' if p_ganados > 0 else ''}{p_ganados}")
-
-    col1, col2 = st.columns([2,1])
-    col1.write(f"Balance neto de la jornada: **{'+' if ganancia_total > 0 else ''}{ganancia_total} 🪙**")
+        sc = float(df_base[df_base['Jugador'] == j['Jugador']]['Score'].values[0])
+        ganancia += int((sc - 64) * 3) if sc >= 65 else int(sc - 65)
     
-    with col1.expander("Ver desglose por jugador"):
-        for d in detalles: st.write(d)
-
-    if col2.button("COBRAR RECOMPENSA 💰"):
-        st.session_state.monedas += ganancia_total
-        if st.session_state.monedas < 0: st.session_state.monedas = 0
-        st.session_state.historial.insert(0, f"Cobro Jornada: {ganancia_total} 🪙")
-        guardar_progreso()
+    st.write(f"Balance de hoy: **{ganancia} 🪙**")
+    if st.button("COBRAR JORNADA 💰"):
+        st.session_state.monedas += ganancia
+        st.session_state.historial.insert(0, f"Cobro Jornada: {ganancia} 🪙")
         st.rerun()
 else:
-    st.info(f"Forma tu 11 titular para calcular la ganancia (Faltan {11 - len(st.session_state.titulares)}).")
+    st.info(f"Faltan {11 - len(st.session_state.titulares)} titulares para cobrar la jornada.")
 
-st.divider()
-
-# --- TABLAS ---
-st.subheader("🔝 Once Titular (1-4-4-2)")
+# Tablas (Once Titular)
+st.subheader("🔝 Once Titular")
 if st.session_state.titulares:
-    ordenar_titulares()
-    # Sincronizar scores
-    for j in st.session_state.titulares:
-        m = df_base[df_base['Jugador'] == j['Jugador']]
-        if not m.empty: j['Score'] = m.iloc[0]['Score']
-
     df_t = pd.DataFrame(st.session_state.titulares)
-    df_t['Nivel_Stars'] = df_t['Nivel'].apply(formato_nivel)
-    st.dataframe(df_t[['POS', 'Jugador', 'Equipo', 'Nivel_Stars', 'Score']], use_container_width=True, hide_index=True, height=422)
+    st.dataframe(df_t[['POS', 'Jugador', 'Equipo']], use_container_width=True, hide_index=True)
     
-    quitar = st.selectbox("Mandar al banco:", [j['Jugador'] for j in st.session_state.titulares], key="q_tit")
-    if st.button("Bajar al banco ⬇️"):
+    quitar = st.selectbox("Mandar al banco:", [j['Jugador'] for j in st.session_state.titulares])
+    if st.button("⬇️ Bajar"):
         idx = next(i for i, j in enumerate(st.session_state.titulares) if j['Jugador'] == quitar)
         st.session_state.suplentes.append(st.session_state.titulares.pop(idx))
-        guardar_progreso()
         st.rerun()
 
-st.divider()
-
+# Suplentes
 st.subheader("⏬ Banco de Suplentes")
 if st.session_state.suplentes:
-    for j in st.session_state.suplentes:
-        m = df_base[df_base['Jugador'] == j['Jugador']]
-        if not m.empty: j['Score'] = m.iloc[0]['Score']
-
     df_s = pd.DataFrame(st.session_state.suplentes)
-    df_s['Nivel_Stars'] = df_s['Nivel'].apply(formato_nivel)
-    st.dataframe(df_s[['Jugador', 'POS', 'Nivel_Stars', 'Equipo']], use_container_width=True, hide_index=True, height=300)
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.write("**Táctica**")
-        subir = st.selectbox("Subir al Once:", [j['Jugador'] for j in st.session_state.suplentes], key="s_sup")
-        if st.button("Poner de Titular ⬆️"):
-            idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == subir)
-            j = st.session_state.suplentes[idx]
-            conteo = [p['POS'] for p in st.session_state.titulares].count(j['POS'])
-            limites = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
-            if (conteo < limites.get(j['POS'], 0)) and (len(st.session_state.titulares) < 11):
-                st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
-                guardar_progreso()
-                st.rerun()
-            else: st.error("Límite de posición o equipo completo.")
-
-    with c2:
-        st.write("**Ventas**")
-        vender_n = st.selectbox("Vender Jugador:", [j['Jugador'] for j in st.session_state.suplentes], key="v_sup")
-        idx_v = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == vender_n)
-        precio = int(st.session_state.suplentes[idx_v]['Nivel']) * 20
-        st.info(f"Precio: {precio} 🪙")
-        if st.button("VENDER 💰"):
-            st.session_state.monedas += precio
-            st.session_state.suplentes.pop(idx_v)
-            guardar_progreso()
+    st.dataframe(df_s[['Jugador', 'POS', 'Equipo']], use_container_width=True, hide_index=True)
+    
+    subir = st.selectbox("Subir al Once:", [j['Jugador'] for j in st.session_state.suplentes])
+    if st.button("⬆️ Subir"):
+        idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == subir)
+        if len(st.session_state.titulares) < 11:
+            st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
             st.rerun()
-
-with st.expander("📜 Ver Historial"):
-    for h in st.session_state.historial: st.write(f"- {h}")
