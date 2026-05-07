@@ -58,7 +58,7 @@ if not st.session_state.autenticado:
                 if st.session_state.autenticado:
                     partidas = cargar_json(DB_PARTIDAS, {})
                     progreso = partidas.get(st.session_state.usuario, {
-                        "monedas": 1000, "titulares": [], "suplentes": [], "historial": ["Partida iniciada"]
+                        "monedas": 1000, "titulares": [], "suplentes": [], "historial": []
                     })
                     st.session_state.monedas = progreso.get("monedas", 1000)
                     st.session_state.titulares = progreso.get("titulares", [])
@@ -67,27 +67,22 @@ if not st.session_state.autenticado:
                     st.rerun()
     st.stop()
 
-# --- 4. CARGA DE DATOS (BLINDADA) ---
+# --- 4. CARGA DE DATOS ---
 @st.cache_data
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2VmykJ-6g-KVHVS3doLPVdxGA09KgOByjy67lnJW-VlJxLWgukpKAUM1PmeTOKbPtH1fNDSUyCBTO/pub?output=csv"
     try:
         df = pd.read_csv(url)
         df.columns = [c.strip() for c in df.columns]
-        
-        # Limpieza profunda de Score para evitar ValueError
-        df['Score'] = df['Score'].astype(str).str.replace(',', '.') # Cambia comas por puntos
-        df['Score'] = pd.to_numeric(df['Score'], errors='coerce').fillna(50) # Si falla, pone 50
-        df.loc[df['Score'] <= 0, 'Score'] = 50 # Si es 0 o negativo, pone 50
-        
+        # Forzar Score a numérico, si falla pone 50
+        df['Score'] = pd.to_numeric(df['Score'], errors='coerce').fillna(50)
         return df
-    except Exception as e:
-        st.error(f"Error al cargar Excel: {e}")
+    except:
         return pd.DataFrame(columns=["Jugador", "POS", "Nivel", "Equipo", "Score"])
 
 df_base = load_data()
 
-# --- 5. FORMATO DE ESTRELLAS (SIN CÍRCULOS) ---
+# --- 5. FORMATO ---
 def formato_nivel(n):
     try: n = int(n)
     except: return "★"
@@ -116,7 +111,6 @@ with st.sidebar:
         if st.session_state.monedas >= 50:
             if len(st.session_state.suplentes) < 30:
                 st.session_state.monedas -= 50
-                # Tomamos los datos limpios de la base
                 nuevo = df_base.sample(n=1).to_dict('records')[0]
                 st.session_state.suplentes.append(nuevo)
                 st.session_state.historial.insert(0, f"Fichaje: {nuevo['Jugador']}")
@@ -129,29 +123,28 @@ with st.sidebar:
 # --- 7. PANEL PRINCIPAL ---
 st.title("⚽ AFA Manager Pro 2026")
 
-# --- PREMIACIÓN ---
+# --- PREMIACIÓN (LÓGICA BLINDADA) ---
 st.subheader("🏆 Premiación de Jornada")
 if len(st.session_state.titulares) == 11:
     ganancia_total = 0
     detalles = []
     
     for j in st.session_state.titulares:
-        # Aseguramos que sc sea float para la cuenta
-        try:
-            sc = float(j.get('Score', 50))
-        except:
-            sc = 50.0
-            
-        if sc >= 65:
-            puntos_ganados = int((sc - 64) * 3)
-        else:
-            puntos_ganados = int(sc - 65) # Ejemplo: 64 - 65 = -1
+        # Buscamos el score actualizado en la base de datos por si cambió en el Sheet
+        match = df_base[df_base['Jugador'] == j['Jugador']]
+        sc = float(match.iloc[0]['Score']) if not match.empty else 50.0
         
-        ganancia_total += puntos_ganados
-        detalles.append(f"{j['Jugador']} ({sc} pts): {'+' if puntos_ganados > 0 else ''}{puntos_ganados}")
+        # Lógica de cálculo
+        if sc >= 65:
+            p_ganados = int((sc - 64) * 3)
+        else:
+            p_ganados = int(sc - 65) # 64 -> -1, 50 -> -15
+            
+        ganancia_total += p_ganados
+        detalles.append(f"{j['Jugador']} ({int(sc)} pts): {'+' if p_ganados > 0 else ''}{p_ganados}")
 
     col1, col2 = st.columns([2,1])
-    col1.write(f"Balance de la jornada: **{'+' if ganancia_total > 0 else ''}{ganancia_total} 🪙**")
+    col1.write(f"Balance neto de la jornada: **{'+' if ganancia_total > 0 else ''}{ganancia_total} 🪙**")
     
     with col1.expander("Ver desglose por jugador"):
         for d in detalles: st.write(d)
@@ -159,11 +152,11 @@ if len(st.session_state.titulares) == 11:
     if col2.button("COBRAR RECOMPENSA 💰"):
         st.session_state.monedas += ganancia_total
         if st.session_state.monedas < 0: st.session_state.monedas = 0
-        st.session_state.historial.insert(0, f"Cobro: {ganancia_total} 🪙")
+        st.session_state.historial.insert(0, f"Cobro Jornada: {ganancia_total} 🪙")
         guardar_progreso()
         st.rerun()
 else:
-    st.info("Forma tu 11 titular para calcular la ganancia.")
+    st.info("Forma tu 11 titular para calcular la ganancia (Faltan " + str(11 - len(st.session_state.titulares)) + " jugadores).")
 
 st.divider()
 
@@ -171,15 +164,14 @@ st.divider()
 st.subheader("🔝 Once Titular (1-4-4-2)")
 if st.session_state.titulares:
     ordenar_titulares()
-    # Sincronizamos scores del sheet con los jugadores que ya tiene el usuario
+    # Actualizar scores antes de mostrar tabla
     for j in st.session_state.titulares:
-        match = df_base[df_base['Jugador'] == j['Jugador']]
-        if not match.empty:
-            j['Score'] = match.iloc[0]['Score']
+        m = df_base[df_base['Jugador'] == j['Jugador']]
+        if not m.empty: j['Score'] = m.iloc[0]['Score']
 
     df_t = pd.DataFrame(st.session_state.titulares)
-    df_t['Estrellas'] = df_t['Nivel'].apply(formato_nivel)
-    st.dataframe(df_t[['POS', 'Jugador', 'Equipo', 'Estrellas', 'Score']], use_container_width=True, hide_index=True, height=422)
+    df_t['Nivel_Stars'] = df_t['Nivel'].apply(formato_nivel)
+    st.dataframe(df_t[['POS', 'Jugador', 'Equipo', 'Nivel_Stars', 'Score']], use_container_width=True, hide_index=True, height=422)
     
     quitar = st.selectbox("Mandar al banco:", [j['Jugador'] for j in st.session_state.titulares], key="q_tit")
     if st.button("Bajar al banco ⬇️"):
@@ -192,15 +184,13 @@ st.divider()
 
 st.subheader("⏬ Banco de Suplentes")
 if st.session_state.suplentes:
-    # Sincronizamos scores también en suplentes
     for j in st.session_state.suplentes:
-        match = df_base[df_base['Jugador'] == j['Jugador']]
-        if not match.empty:
-            j['Score'] = match.iloc[0]['Score']
+        m = df_base[df_base['Jugador'] == j['Jugador']]
+        if not m.empty: j['Score'] = m.iloc[0]['Score']
 
     df_s = pd.DataFrame(st.session_state.suplentes)
-    df_s['Estrellas'] = df_s['Nivel'].apply(formato_nivel)
-    st.dataframe(df_s[['Jugador', 'POS', 'Estrellas', 'Equipo']], use_container_width=True, hide_index=True, height=300)
+    df_s['Nivel_Stars'] = df_s['Nivel'].apply(formato_nivel)
+    st.dataframe(df_s[['Jugador', 'POS', 'Nivel_Stars', 'Equipo']], use_container_width=True, hide_index=True, height=300)
 
     c1, c2 = st.columns(2)
     with c1:
