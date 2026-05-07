@@ -79,7 +79,7 @@ for lista in [st.session_state.titulares, st.session_state.suplentes]:
             j['Score'], j['Nivel'] = float(match.iloc[0]['Score']), int(match.iloc[0]['Nivel'])
 
 # --- 5. PANEL PRINCIPAL ---
-st.title(f"🥅 Campo de Juego: 1-4-4-2")
+st.title(f"🥅 AFA Manager: {st.session_state.usuario}")
 
 # --- RESUMEN DE PUNTAJES ---
 if st.session_state.titulares:
@@ -96,58 +96,53 @@ if st.session_state.titulares:
     else:
         c2.warning(f"Faltan {11 - len(st.session_state.titulares)} jugadores")
 
-# --- LISTADOS SEPARADOS POR POSICIÓN ---
-st.divider()
-posiciones_orden = ["ARQ", "DEF", "VOL", "DEL"]
-titulares_df = pd.DataFrame(st.session_state.titulares) if st.session_state.titulares else pd.DataFrame()
-
-cols = st.columns(4)
-for i, pos in enumerate(posiciones_orden):
-    with cols[i]:
-        st.markdown(f"### {pos}")
-        if not titulares_df.empty:
-            df_pos = titulares_df[titulares_df['POS'] == pos]
-            if not df_pos.empty:
+# --- FUNCION PARA RENDERIZAR FILAS DE JUGADORES ---
+def mostrar_jugadores_por_linea(lista_jugadores, modo="titular"):
+    posiciones = ["ARQ", "DEF", "VOL", "DEL"]
+    cols = st.columns(4)
+    df = pd.DataFrame(lista_jugadores) if lista_jugadores else pd.DataFrame()
+    
+    for i, pos in enumerate(posiciones):
+        with cols[i]:
+            st.markdown(f"#### {pos}")
+            if not df.empty and pos in df['POS'].values:
+                df_pos = df[df['POS'] == pos]
                 for _, jug in df_pos.iterrows():
                     with st.expander(f"{jug['Jugador']}"):
-                        st.write(f"{jug['Equipo']} | {formato_estrellas(jug['Nivel'])}")
+                        st.caption(f"{jug['Equipo']} | {formato_estrellas(jug['Nivel'])}")
                         st.write(f"Score: {jug['Score']}")
-                        if st.button("⬇️ Bajar", key=f"b_{jug['Jugador']}"):
-                            idx = next(idx for idx, j in enumerate(st.session_state.titulares) if j['Jugador'] == jug['Jugador'])
-                            st.session_state.suplentes.append(st.session_state.titulares.pop(idx))
-                            st.rerun()
-            else: st.caption("Vacío")
-        else: st.caption("Vacío")
+                        
+                        if modo == "titular":
+                            if st.button("⬇️ Bajar", key=f"baj_{jug['Jugador']}"):
+                                idx = next(idx for idx, j in enumerate(st.session_state.titulares) if j['Jugador'] == jug['Jugador'])
+                                st.session_state.suplentes.append(st.session_state.titulares.pop(idx))
+                                st.rerun()
+                        else:
+                            # Botones para Suplentes (Subir o Vender)
+                            if st.button("⬆️ Subir", key=f"sub_{jug['Jugador']}"):
+                                idx = next(idx for idx, j in enumerate(st.session_state.suplentes) if j['Jugador'] == jug['Jugador'])
+                                limites = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
+                                actual = [p['POS'] for p in st.session_state.titulares].count(pos)
+                                if len(st.session_state.titulares) < 11 and actual < limites.get(pos, 0):
+                                    st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
+                                    st.rerun()
+                                else: st.error("Cupo lleno")
+                            
+                            precio = int(jug['Nivel']) * 20
+                            if st.button(f"💰 ${precio}", key=f"ven_{jug['Jugador']}"):
+                                idx = next(idx for idx, j in enumerate(st.session_state.suplentes) if j['Jugador'] == jug['Jugador'])
+                                st.session_state.monedas += precio
+                                st.session_state.suplentes.pop(idx)
+                                st.rerun()
+            else:
+                st.caption("---")
 
-# --- BANCO DE SUPLENTES Y VENTAS ---
+# --- TITULARES ---
+st.divider()
+st.subheader("🔝 Once Titular (1-4-4-2)")
+mostrar_jugadores_por_linea(st.session_state.titulares, modo="titular")
+
+# --- SUPLENTES ---
 st.divider()
 st.subheader("⏬ Banco de Suplentes")
-if st.session_state.suplentes:
-    df_s = pd.DataFrame(st.session_state.suplentes)
-    df_s['Rango'] = df_s['Nivel'].apply(formato_estrellas)
-    st.dataframe(df_s[['Jugador', 'POS', 'Rango', 'Equipo', 'Score']], use_container_width=True, hide_index=True)
-
-    col_subir, col_vender = st.columns(2)
-    with col_subir:
-        s = st.selectbox("Elegir para subir:", [j['Jugador'] for j in st.session_state.suplentes])
-        if st.button("⬆️ Subir al 11"):
-            idx = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == s)
-            jug = st.session_state.suplentes[idx]
-            
-            limites = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
-            actual = [p['POS'] for p in st.session_state.titulares].count(jug['POS'])
-            
-            if len(st.session_state.titulares) < 11 and actual < limites.get(jug['POS'], 0):
-                st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
-                st.rerun()
-            else:
-                st.error(f"Cupo lleno para {jug['POS']} (Máximo {limites.get(jug['POS'])})")
-
-    with col_vender:
-        v = st.selectbox("Elegir para vender:", [j['Jugador'] for j in st.session_state.suplentes], key="v_sel")
-        idx_v = next(i for i, j in enumerate(st.session_state.suplentes) if j['Jugador'] == v)
-        precio = int(st.session_state.suplentes[idx_v]['Nivel']) * 20
-        if st.button(f"💰 VENDER POR {precio} 🪙"):
-            st.session_state.monedas += precio
-            st.session_state.suplentes.pop(idx_v)
-            st.rerun()
+mostrar_jugadores_por_linea(st.session_state.suplentes, modo="suplente")
