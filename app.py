@@ -40,11 +40,14 @@ df_base = load_data()
 # --- 4. GESTIÓN DE SESIÓN ---
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
+if 'confirmar_fichaje' not in st.session_state:
+    st.session_state.confirmar_fichaje = False
+if 'confirmar_cobro' not in st.session_state:
+    st.session_state.confirmar_cobro = False
 
 with st.sidebar:
     st.title("🛡️ SESIÓN")
     archivo = st.file_uploader("Selecciona tu partida", type=None) 
-    
     if archivo is not None:
         if st.button("✅ CARGAR ARCHIVO SELECCIONADO"):
             try:
@@ -57,8 +60,7 @@ with st.sidebar:
                 st.session_state.historial = data.get('historial', [])
                 st.session_state.autenticado = True
                 st.rerun()
-            except:
-                st.error("Archivo inválido")
+            except: st.error("Archivo inválido")
 
     if not st.session_state.autenticado:
         u_nuevo = st.text_input("Nombre Manager").strip()
@@ -76,7 +78,7 @@ with st.sidebar:
 
 if not st.session_state.autenticado: st.stop()
 
-# Sincronizar datos con Excel
+# Sincronizar datos
 for lista in [st.session_state.titulares, st.session_state.suplentes]:
     for j in lista:
         match = df_base[df_base['Jugador'] == j['Jugador']]
@@ -84,18 +86,28 @@ for lista in [st.session_state.titulares, st.session_state.suplentes]:
             j['Score'], j['Nivel'] = float(match.iloc[0]['Score']), int(match.iloc[0]['Nivel'])
 
 # --- 5. PANEL PRINCIPAL ---
-st.markdown("### ⚽ Futbol Total") # Título más pequeño
+st.markdown("### ⚽ Futbol Total")
 
-# --- PRESUPUESTO Y RECOMPENSA (Centro de la pantalla) ---
+# --- PRESUPUESTO Y RECOMPENSA (Doble Seguridad Cobro) ---
 c_pres, c_recom = st.columns(2)
 c_pres.metric("Presupuesto Actual", f"{st.session_state.monedas} 🪙")
 
 if len(st.session_state.titulares) == 11:
     ganancia = sum([int((j['Score']-64)*3) if j['Score']>=65 else int(j['Score']-65) for j in st.session_state.titulares])
     c_recom.metric("Balance Jornada", f"{ganancia} 🪙")
-    if st.button("💰 COBRAR RECOMPENSA"):
-        st.session_state.monedas += ganancia
-        st.rerun()
+    
+    if not st.session_state.confirmar_cobro:
+        if c_recom.button("💰 COBRAR RECOMPENSA"):
+            st.session_state.confirmar_cobro = True
+            st.rerun()
+    else:
+        if c_recom.button("⚠️ ¿CONFIRMAR COBRO?"):
+            st.session_state.monedas += ganancia
+            st.session_state.confirmar_cobro = False
+            st.rerun()
+        if c_recom.button("Cancelar", key="cancel_cobro"):
+            st.session_state.confirmar_cobro = False
+            st.rerun()
 else:
     c_recom.warning(f"Faltan {11 - len(st.session_state.titulares)} titulares")
 
@@ -142,20 +154,30 @@ st.divider()
 st.subheader("📋 Alineación Titular (1-4-4-2)")
 dibujar_lineas(st.session_state.titulares, modo="titular")
 
-# --- SECCIÓN SUPLENTES ---
+# --- SECCIÓN SUPLENTES (Doble Seguridad Fichar) ---
 st.divider()
 col_inf, col_fich = st.columns([2, 1])
 with col_inf:
     st.info("📦 **BANCO DE SUPLENTES**")
+
 with col_fich:
-    # Botón de Fichar reubicado aquí
-    if st.button("🛒 FICHAR JUGADOR (50 🪙)", use_container_width=True):
-        if st.session_state.monedas >= 50:
-            st.session_state.monedas -= 50
-            nuevo = df_base.sample(n=1).to_dict('records')[0]
-            st.session_state.suplentes.append(nuevo)
+    if not st.session_state.confirmar_fichaje:
+        if st.button("🛒 FICHAR JUGADOR (50 🪙)", use_container_width=True):
+            st.session_state.confirmar_fichaje = True
             st.rerun()
-        else:
-            st.error("¡No tienes monedas!")
+    else:
+        if st.button("⚠️ ¿CONFIRMAR COMPRA?", use_container_width=True):
+            if st.session_state.monedas >= 50:
+                st.session_state.monedas -= 50
+                nuevo = df_base.sample(n=1).to_dict('records')[0]
+                st.session_state.suplentes.append(nuevo)
+                st.session_state.confirmar_fichaje = False
+                st.rerun()
+            else:
+                st.error("¡No tienes monedas!")
+                st.session_state.confirmar_fichaje = False
+        if st.button("Cancelar", key="cancel_fichaje", use_container_width=True):
+            st.session_state.confirmar_fichaje = False
+            st.rerun()
 
 dibujar_lineas(st.session_state.suplentes, modo="suplente")
