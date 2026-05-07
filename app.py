@@ -43,17 +43,39 @@ if 'autenticado' not in st.session_state:
 
 with st.sidebar:
     st.title("🛡️ SESIÓN")
-    archivo = st.file_uploader("Cargar Partida (.json)", type="json")
-    if archivo:
-        data = json.load(archivo)
-        st.session_state.update(data)
-        st.session_state.autenticado = True
+    
+    # 1. El cargador ahora acepta CUALQUIER extensión para que el celu no lo bloquee
+    archivo = st.file_uploader("Selecciona tu partida", type=None) 
+    
+    if archivo is not None:
+        # Agregamos un botón físico para forzar la lectura en móviles
+        if st.button("✅ CARGAR ARCHIVO SELECCIONADO"):
+            try:
+                # Leemos el archivo de forma binaria para que no importe el formato
+                bytes_data = archivo.read()
+                data = json.loads(bytes_data.decode("utf-8"))
+                
+                # Sincronizamos la sesión
+                st.session_state.usuario = data['usuario']
+                st.session_state.monedas = data['monedas']
+                st.session_state.titulares = data['titulares']
+                st.session_state.suplentes = data['suplentes']
+                st.session_state.historial = data.get('historial', [])
+                st.session_state.autenticado = True
+                
+                st.success("¡Datos recuperados!")
+                st.rerun()
+            except Exception as e:
+                st.error("El archivo no es válido o está dañado.")
 
-    if not st.session_state.autenticado:
-        u = st.text_input("Nombre Manager").strip()
-        if st.button("Nueva Partida"):
-            if u:
-                st.session_state.usuario, st.session_state.monedas = u, 1000
+    # 2. LOGIN MANUAL (Si no hay archivo)
+    if not st.session_state.get('autenticado'):
+        st.divider()
+        u_nuevo = st.text_input("O escribe tu nombre manager:").strip()
+        if st.button("Empezar de cero"):
+            if u_nuevo:
+                st.session_state.usuario = u_nuevo
+                st.session_state.monedas = 1000
                 st.session_state.titulares, st.session_state.suplentes, st.session_state.historial = [], [], []
                 st.session_state.autenticado = True
                 st.rerun()
