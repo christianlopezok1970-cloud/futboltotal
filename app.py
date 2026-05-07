@@ -4,7 +4,7 @@ import json
 import base64
 
 # --- 1. CONFIGURACIÓN ---
-st.set_page_config(page_title="AFA Manager 2026", layout="wide")
+st.set_page_config(page_title="Futbol Total", layout="wide")
 
 # --- 2. FUNCIONES DE APOYO ---
 def formato_estrellas(nivel):
@@ -43,58 +43,40 @@ if 'autenticado' not in st.session_state:
 
 with st.sidebar:
     st.title("🛡️ SESIÓN")
-    
-    # 1. El cargador ahora acepta CUALQUIER extensión para que el celu no lo bloquee
     archivo = st.file_uploader("Selecciona tu partida", type=None) 
     
     if archivo is not None:
-        # Agregamos un botón físico para forzar la lectura en móviles
         if st.button("✅ CARGAR ARCHIVO SELECCIONADO"):
             try:
-                # Leemos el archivo de forma binaria para que no importe el formato
                 bytes_data = archivo.read()
                 data = json.loads(bytes_data.decode("utf-8"))
-                
-                # Sincronizamos la sesión
                 st.session_state.usuario = data['usuario']
                 st.session_state.monedas = data['monedas']
                 st.session_state.titulares = data['titulares']
                 st.session_state.suplentes = data['suplentes']
                 st.session_state.historial = data.get('historial', [])
                 st.session_state.autenticado = True
-                
-                st.success("¡Datos recuperados!")
                 st.rerun()
-            except Exception as e:
-                st.error("El archivo no es válido o está dañado.")
+            except:
+                st.error("Archivo inválido")
 
-    # 2. LOGIN MANUAL (Si no hay archivo)
-    if not st.session_state.get('autenticado'):
-        st.divider()
-        u_nuevo = st.text_input("O escribe tu nombre manager:").strip()
-        if st.button("Empezar de cero"):
+    if not st.session_state.autenticado:
+        u_nuevo = st.text_input("Nombre Manager").strip()
+        if st.button("Empezar Nueva Partida"):
             if u_nuevo:
-                st.session_state.usuario = u_nuevo
-                st.session_state.monedas = 1000
+                st.session_state.usuario, st.session_state.monedas = u_nuevo, 1000
                 st.session_state.titulares, st.session_state.suplentes, st.session_state.historial = [], [], []
                 st.session_state.autenticado = True
                 st.rerun()
     
     if st.session_state.autenticado:
         st.write(f"Manager: **{st.session_state.usuario}**")
-        st.metric("Presupuesto", f"{st.session_state.monedas} 🪙")
-        if st.button("🛒 FICHAR JUGADOR (50 🪙)"):
-            if st.session_state.monedas >= 50:
-                st.session_state.monedas -= 50
-                nuevo = df_base.sample(n=1).to_dict('records')[0]
-                st.session_state.suplentes.append(nuevo)
-                st.rerun()
         st.divider()
         st.markdown(exportar_partida(), unsafe_allow_html=True)
 
 if not st.session_state.autenticado: st.stop()
 
-# Sincronizar datos
+# Sincronizar datos con Excel
 for lista in [st.session_state.titulares, st.session_state.suplentes]:
     for j in lista:
         match = df_base[df_base['Jugador'] == j['Jugador']]
@@ -102,17 +84,20 @@ for lista in [st.session_state.titulares, st.session_state.suplentes]:
             j['Score'], j['Nivel'] = float(match.iloc[0]['Score']), int(match.iloc[0]['Nivel'])
 
 # --- 5. PANEL PRINCIPAL ---
-st.title(f"🥅 Campo de Juego")
+st.markdown("### ⚽ Futbol Total") # Título más pequeño
 
-# --- RECOMPENSA (Solo si están los 11) ---
+# --- PRESUPUESTO Y RECOMPENSA (Centro de la pantalla) ---
+c_pres, c_recom = st.columns(2)
+c_pres.metric("Presupuesto Actual", f"{st.session_state.monedas} 🪙")
+
 if len(st.session_state.titulares) == 11:
     ganancia = sum([int((j['Score']-64)*3) if j['Score']>=65 else int(j['Score']-65) for j in st.session_state.titulares])
-    st.info(f"Balance Jornada: **{ganancia} 🪙**")
+    c_recom.metric("Balance Jornada", f"{ganancia} 🪙")
     if st.button("💰 COBRAR RECOMPENSA"):
         st.session_state.monedas += ganancia
         st.rerun()
 else:
-    st.caption(f"Faltan {11 - len(st.session_state.titulares)} jugadores para completar el 1-4-4-2")
+    c_recom.warning(f"Faltan {11 - len(st.session_state.titulares)} titulares")
 
 # --- FUNCION DE RENDERIZADO ---
 MAPPING_POS = {"ARQ": "Arquero", "DEF": "Defensores", "VOL": "Volantes", "DEL": "Delanteros"}
@@ -121,10 +106,8 @@ def dibujar_lineas(lista_jugadores, modo="titular"):
     posiciones = ["ARQ", "DEF", "VOL", "DEL"]
     cols = st.columns(4)
     df = pd.DataFrame(lista_jugadores) if lista_jugadores else pd.DataFrame()
-    
     for i, pos_key in enumerate(posiciones):
         with cols[i]:
-            # Título más pequeño y nombre completo
             st.markdown(f"**{MAPPING_POS[pos_key]}**")
             if not df.empty and pos_key in df['POS'].values:
                 df_pos = df[df['POS'] == pos_key]
@@ -132,7 +115,6 @@ def dibujar_lineas(lista_jugadores, modo="titular"):
                     with st.expander(f"{jug['Jugador']}"):
                         st.caption(f"{jug['Equipo']} | {formato_estrellas(jug['Nivel'])}")
                         st.write(f"Score: {jug['Score']}")
-                        
                         if modo == "titular":
                             if st.button("⬇️ Bajar", key=f"t_{jug['Jugador']}"):
                                 idx = next(idx for idx, j in enumerate(st.session_state.titulares) if j['Jugador'] == jug['Jugador'])
@@ -146,23 +128,34 @@ def dibujar_lineas(lista_jugadores, modo="titular"):
                                 if len(st.session_state.titulares) < 11 and actual < limites.get(pos_key, 0):
                                     st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
                                     st.rerun()
-                                else: st.error("Límite alcanzado")
-                            
+                                else: st.error("Límite!")
                             precio = int(jug['Nivel']) * 20
                             if st.button(f"💰 ${precio}", key=f"v_{jug['Jugador']}"):
                                 idx = next(idx for idx, j in enumerate(st.session_state.suplentes) if j['Jugador'] == jug['Jugador'])
                                 st.session_state.monedas += precio
                                 st.session_state.suplentes.pop(idx)
                                 st.rerun()
-            else:
-                st.caption("---")
+            else: st.caption("---")
 
 # --- SECCIÓN TITULARES ---
 st.divider()
 st.subheader("📋 Alineación Titular (1-4-4-2)")
 dibujar_lineas(st.session_state.titulares, modo="titular")
 
-# --- SECCIÓN SUPLENTES (Con diferenciación) ---
+# --- SECCIÓN SUPLENTES ---
 st.divider()
-st.info("📦 **BANCO DE SUPLENTES**") # Cuadro de color para diferenciar
+col_inf, col_fich = st.columns([2, 1])
+with col_inf:
+    st.info("📦 **BANCO DE SUPLENTES**")
+with col_fich:
+    # Botón de Fichar reubicado aquí
+    if st.button("🛒 FICHAR JUGADOR (50 🪙)", use_container_width=True):
+        if st.session_state.monedas >= 50:
+            st.session_state.monedas -= 50
+            nuevo = df_base.sample(n=1).to_dict('records')[0]
+            st.session_state.suplentes.append(nuevo)
+            st.rerun()
+        else:
+            st.error("¡No tienes monedas!")
+
 dibujar_lineas(st.session_state.suplentes, modo="suplente")
