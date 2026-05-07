@@ -155,14 +155,14 @@ def dibujar_lineas(lista_jugadores, modo="titular"):
 
 # --- SECCIÓN TITULARES ---
 st.divider()
-st.subheader("📋 Alineación Titular (1-4-4-2)")
+st.subheader("TITULARES")
 dibujar_lineas(st.session_state.titulares, modo="titular")
 
 # --- SECCIÓN SUPLENTES (Doble Seguridad Fichar) ---
 st.divider()
 col_inf, col_fich = st.columns([2, 1])
 with col_inf:
-    st.info("📦 **BANCO DE SUPLENTES**")
+    st.info("**BANCO DE SUPLENTES**")
 
 with col_fich:
     if not st.session_state.confirmar_fichaje:
