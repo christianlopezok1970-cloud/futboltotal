@@ -88,13 +88,17 @@ for lista in [st.session_state.titulares, st.session_state.suplentes]:
 # --- 5. PANEL PRINCIPAL ---
 st.markdown("### ⚽ Futbol Total")
 
-# --- PRESUPUESTO Y RECOMPENSA (Doble Seguridad Cobro) ---
+# --- PRESUPUESTO Y RECOMPENSA (Tamaño ajustado) ---
 c_pres, c_recom = st.columns(2)
+
+# El presupuesto lo dejamos grande porque es el dato principal
 c_pres.metric("Presupuesto Actual", f"{st.session_state.monedas} 🪙")
 
 if len(st.session_state.titulares) == 11:
     ganancia = sum([int((j['Score']-64)*3) if j['Score']>=65 else int(j['Score']-65) for j in st.session_state.titulares])
-    c_recom.metric("Balance Jornada", f"{ganancia} 🪙")
+    
+    # Reemplazamos st.metric por markdown para achicar el número
+    c_recom.markdown(f"**Balance Jornada:** \n{ganancia} 🪙")
     
     if not st.session_state.confirmar_cobro:
         if c_recom.button("💰 COBRAR RECOMPENSA"):
