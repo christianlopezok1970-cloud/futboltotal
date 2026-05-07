@@ -10,7 +10,7 @@ st.set_page_config(page_title="AFA Manager 2026", layout="wide")
 DB_USERS = "usuarios_db.json"
 DB_PARTIDAS = "partidas_db.json"
 
-# --- 2. PERSISTENCIA ---
+# --- 2. PERSISTENCIA (CORREGIDA PARA EVITAR TYPEERROR) ---
 def cargar_json(archivo, defecto):
     if os.path.exists(archivo):
         try:
@@ -18,8 +18,21 @@ def cargar_json(archivo, defecto):
         except: return defecto
     return defecto
 
+def serializar_datos(obj):
+    """Convierte tipos de datos de Pandas/Numpy a tipos nativos de Python para JSON."""
+    if isinstance(obj, (list, tuple)):
+        return [serializar_datos(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: serializar_datos(v) for k, v in obj.items()}
+    if hasattr(obj, "item"): # Esto detecta tipos de numpy/pandas (int64, float64)
+        return obj.item()
+    return obj
+
 def guardar_json(archivo, datos):
-    with open(archivo, "w") as f: json.dump(datos, f)
+    # Limpiamos los datos antes de guardar para que JSON no de error
+    datos_limpios = serializar_datos(datos)
+    with open(archivo, "w") as f: 
+        json.dump(datos_limpios, f)
 
 def guardar_progreso():
     if 'usuario' in st.session_state and st.session_state.autenticado:
@@ -74,7 +87,7 @@ def load_data():
     try:
         df = pd.read_csv(url)
         df.columns = [c.strip() for c in df.columns]
-        # Forzar Score a numérico, si falla pone 50
+        # Si el Score falla o es 0, poner 50 por defecto
         df['Score'] = pd.to_numeric(df['Score'], errors='coerce').fillna(50)
         return df
     except:
@@ -123,22 +136,20 @@ with st.sidebar:
 # --- 7. PANEL PRINCIPAL ---
 st.title("⚽ AFA Manager Pro 2026")
 
-# --- PREMIACIÓN (LÓGICA BLINDADA) ---
+# --- PREMIACIÓN ---
 st.subheader("🏆 Premiación de Jornada")
 if len(st.session_state.titulares) == 11:
     ganancia_total = 0
     detalles = []
     
     for j in st.session_state.titulares:
-        # Buscamos el score actualizado en la base de datos por si cambió en el Sheet
         match = df_base[df_base['Jugador'] == j['Jugador']]
         sc = float(match.iloc[0]['Score']) if not match.empty else 50.0
         
-        # Lógica de cálculo
         if sc >= 65:
             p_ganados = int((sc - 64) * 3)
         else:
-            p_ganados = int(sc - 65) # 64 -> -1, 50 -> -15
+            p_ganados = int(sc - 65)
             
         ganancia_total += p_ganados
         detalles.append(f"{j['Jugador']} ({int(sc)} pts): {'+' if p_ganados > 0 else ''}{p_ganados}")
@@ -156,7 +167,7 @@ if len(st.session_state.titulares) == 11:
         guardar_progreso()
         st.rerun()
 else:
-    st.info("Forma tu 11 titular para calcular la ganancia (Faltan " + str(11 - len(st.session_state.titulares)) + " jugadores).")
+    st.info(f"Forma tu 11 titular para calcular la ganancia (Faltan {11 - len(st.session_state.titulares)}).")
 
 st.divider()
 
@@ -164,7 +175,7 @@ st.divider()
 st.subheader("🔝 Once Titular (1-4-4-2)")
 if st.session_state.titulares:
     ordenar_titulares()
-    # Actualizar scores antes de mostrar tabla
+    # Sincronizar scores
     for j in st.session_state.titulares:
         m = df_base[df_base['Jugador'] == j['Jugador']]
         if not m.empty: j['Score'] = m.iloc[0]['Score']
@@ -201,11 +212,11 @@ if st.session_state.suplentes:
             j = st.session_state.suplentes[idx]
             conteo = [p['POS'] for p in st.session_state.titulares].count(j['POS'])
             limites = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
-            if conteo < limites.get(j['POS'], 0):
+            if (conteo < limites.get(j['POS'], 0)) and (len(st.session_state.titulares) < 11):
                 st.session_state.titulares.append(st.session_state.suplentes.pop(idx))
                 guardar_progreso()
                 st.rerun()
-            else: st.error("Límite alcanzado.")
+            else: st.error("Límite de posición o equipo completo.")
 
     with c2:
         st.write("**Ventas**")
