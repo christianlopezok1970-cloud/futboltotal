@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import json
-import base64
 from datetime import datetime
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
@@ -20,7 +19,6 @@ def ejecutar_db(query, params=(), commit=False):
 ejecutar_db('''CREATE TABLE IF NOT EXISTS usuarios 
              (id INTEGER PRIMARY KEY, nombre TEXT UNIQUE, password TEXT, monedas REAL)''', commit=True)
 
-# PARCHE DE SEGURIDAD: Intentar añadir 'prestigio' por si la DB es vieja
 try:
     ejecutar_db("ALTER TABLE usuarios ADD COLUMN prestigio INTEGER DEFAULT 0", commit=True)
 except:
@@ -28,37 +26,10 @@ except:
 
 ejecutar_db('''CREATE TABLE IF NOT EXISTS plantilla 
              (id INTEGER PRIMARY KEY, usuario_id INTEGER, jugador_nombre TEXT, 
-              posicion TEXT, nivel INTEGER, equipo TEXT, score REAL, es_titular INTEGER)''', commit=True)
+             posicion TEXT, nivel INTEGER, equipo TEXT, score REAL, es_titular INTEGER)''', commit=True)
 
-# --- 2. FUNCIONES DE APOYO ---
-def generar_backup(u_id):
-    user_data = ejecutar_db("SELECT nombre, monedas, prestigio FROM usuarios WHERE id = ?", (u_id,))
-    if not user_data: return "{}"
-    user = user_data[0]
-    plantilla = ejecutar_db("SELECT jugador_nombre, posicion, nivel, equipo, score, es_titular FROM plantilla WHERE usuario_id = ?", (u_id,))
-    
-    data = {
-        "manager": user[0],
-        "monedas": user[1],
-        "prestigio_comprado": user[2],
-        "jugadores": [
-            {"nombre": j[0], "pos": j[1], "nivel": j[2], "equipo": j[3], "score": j[4], "titular": j[5]} 
-            for j in plantilla
-        ]
-    }
-    return json.dumps(data, indent=4)
-
-# --- 3. ESTILO VISUAL ---
-st.markdown("""
-    <style>
-    .stApp { background: linear-gradient(180deg, #0e1117 0%, #000814 100%); }
-    .stMetric { background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; }
-    h1, h2, h3 { color: #f0f2f6 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- 4. CARGA DE DATOS ---
-@st.cache_data
+# --- 2. CARGA DE DATOS (EXCEL/SHEET) ---
+@st.cache_data(ttl=300)  # Se actualiza cada 5 minutos
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2VmykJ-6g-KVHVS3doLPVdxGA09KgOByjy67lnJW-VlJxLWgukpKAUM1PmeTOKbPtH1fNDSUyCBTO/pub?output=csv"
     try:
@@ -71,6 +42,37 @@ def load_data():
         return pd.DataFrame(columns=["Jugador", "POS", "Nivel", "Equipo", "Score"])
 
 df_base = load_data()
+
+# --- 3. FUNCIONES DE APOYO ---
+def generar_backup(u_id):
+    user_data = ejecutar_db("SELECT nombre, monedas, prestigio FROM usuarios WHERE id = ?", (u_id,))
+    if not user_data: return "{}"
+    user = user_data[0]
+    plantilla = ejecutar_db("SELECT jugador_nombre, posicion, nivel, equipo, score, es_titular FROM plantilla WHERE usuario_id = ?", (u_id,))
+    data = {
+        "manager": user[0], "monedas": user[1], "prestigio_comprado": user[2],
+        "jugadores": [{"nombre": j[0], "pos": j[1], "nivel": j[2], "equipo": j[3], "score": j[4], "titular": j[5]} for j in plantilla]
+    }
+    return json.dumps(data, indent=4)
+
+def sincronizar_scores(u_id, df_web):
+    """Actualiza los scores de la DB local basándose en el Excel actualizado"""
+    scores_dict = df_web.set_index('Jugador')['Score'].to_dict()
+    plantilla_local = ejecutar_db("SELECT id, jugador_nombre FROM plantilla WHERE usuario_id = ?", (u_id,))
+    
+    for id_reg, nombre_jug in plantilla_local:
+        if nombre_jug in scores_dict:
+            nuevo_score = float(scores_dict[nombre_jug])
+            ejecutar_db("UPDATE plantilla SET score = ? WHERE id = ?", (nuevo_score, id_reg), commit=True)
+
+# --- 4. ESTILO VISUAL ---
+st.markdown("""
+    <style>
+    .stApp { background: linear-gradient(180deg, #0e1117 0%, #000814 100%); }
+    .stMetric { background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; }
+    h1, h2, h3 { color: #f0f2f6 !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- 5. AUTENTICACIÓN ---
 with st.sidebar:
@@ -95,6 +97,9 @@ with st.sidebar:
         if password != u_pass:
             st.error("Contraseña incorrecta")
             st.stop()
+        
+        # SI EL LOGIN ES EXITOSO, ACTUALIZAMOS SCORES DESDE EL SHEET
+        sincronizar_scores(u_id, df_base)
         st.success(f"Conectado: {manager}")
 
     st.divider()
@@ -108,6 +113,7 @@ with st.sidebar:
             st.rerun()
 
 # --- 6. LÓGICA DE JUEGO ---
+# Volvemos a leer la plantilla (ya actualizada por la función sincronizar_scores)
 jugadores_db = ejecutar_db("SELECT jugador_nombre, posicion, nivel, equipo, score, es_titular, id FROM plantilla WHERE usuario_id = ?", (u_id,))
 titulares = [j for j in jugadores_db if j[5] == 1]
 suplentes = [j for j in jugadores_db if j[5] == 0]
@@ -121,6 +127,7 @@ if len(titulares) == 11:
     ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
     c2.markdown(f"**Balance Jornada:** {ganancia} 🪙")
     if 'c_cobro' not in st.session_state: st.session_state.c_cobro = False
+    
     if not st.session_state.c_cobro:
         if c2.button("💰 COBRAR JORNADA", use_container_width=True):
             st.session_state.c_cobro = True
@@ -156,7 +163,7 @@ def dibujar_plantilla(lista, modo="titular"):
             for j in [x for x in lista if x[1] == pk]:
                 with st.expander(f"{j[0]}"):
                     st.caption(f"{j[3]} | {'★' * int(j[2])}")
-                    st.write(f"Score: {j[4]}")
+                    st.write(f"Score: **{j[4]}**") # Aquí se verá el score actualizado
                     if modo == "titular":
                         if st.button("⬇️ Bajar", key=f"down_{j[6]}"):
                             ejecutar_db("UPDATE plantilla SET es_titular = 0 WHERE id = ?", (j[6],), commit=True)
@@ -199,4 +206,5 @@ with st.expander("🏆 RANKING"):
         val_j = sum([x[0]*20 for x in ejecutar_db("SELECT nivel FROM plantilla WHERE usuario_id=?", (u[0],))])
         total = int(u[2] + val_j + (u[3]*100))
         lb.append({"Manager": u[1], "Valor Total 💎": total, "Prestigio": u[3]})
-    st.table(pd.DataFrame(lb).sort_values("Valor Total 💎", ascending=False))
+    if lb:
+        st.table(pd.DataFrame(lb).sort_values("Valor Total 💎", ascending=False))
