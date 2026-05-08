@@ -29,7 +29,7 @@ ejecutar_db('''CREATE TABLE IF NOT EXISTS plantilla
              posicion TEXT, nivel INTEGER, equipo TEXT, score REAL, es_titular INTEGER)''', commit=True)
 
 # --- 2. CARGA DE DATOS (EXCEL/SHEET) ---
-@st.cache_data(ttl=300)  # Se actualiza cada 5 minutos
+@st.cache_data(ttl=300) 
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2VmykJ-6g-KVHVS3doLPVdxGA09KgOByjy67lnJW-VlJxLWgukpKAUM1PmeTOKbPtH1fNDSUyCBTO/pub?output=csv"
     try:
@@ -56,23 +56,60 @@ def generar_backup(u_id):
     return json.dumps(data, indent=4)
 
 def sincronizar_scores(u_id, df_web):
-    """Actualiza los scores de la DB local basándose en el Excel actualizado"""
     scores_dict = df_web.set_index('Jugador')['Score'].to_dict()
     plantilla_local = ejecutar_db("SELECT id, jugador_nombre FROM plantilla WHERE usuario_id = ?", (u_id,))
-    
     for id_reg, nombre_jug in plantilla_local:
         if nombre_jug in scores_dict:
             nuevo_score = float(scores_dict[nombre_jug])
             ejecutar_db("UPDATE plantilla SET score = ? WHERE id = ?", (nuevo_score, id_reg), commit=True)
 
-# --- 4. ESTILO VISUAL ---
-st.markdown("""
-    <style>
-    .stApp { background: linear-gradient(180deg, #0e1117 0%, #000814 100%); }
-    .stMetric { background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; }
-    h1, h2, h3 { color: #f0f2f6 !important; }
-    </style>
-    """, unsafe_allow_html=True)
+# --- 4. RENDERIZADO DE PLANTILLA CON SEGURIDAD ---
+MAPPING_POS = {"ARQ": "Arquero", "DEF": "Defensores", "VOL": "Volantes", "DEL": "Delanteros"}
+
+def dibujar_plantilla(lista, modo="titular", u_id=None, monedas=0, titulares=[]):
+    posiciones = ["ARQ", "DEF", "VOL", "DEL"]
+    cols = st.columns(4)
+    for i, pk in enumerate(posiciones):
+        with cols[i]:
+            st.markdown(f"**{MAPPING_POS[pk]}**")
+            for j in [x for x in lista if x[1] == pk]:
+                id_jugador = j[6]
+                with st.expander(f"{j[0]}"):
+                    st.caption(f"{j[3]} | {'★' * int(j[2])}")
+                    st.write(f"Score: **{j[4]}**")
+                    
+                    if modo == "titular":
+                        if st.button("⬇️ Bajar", key=f"down_{id_jugador}"):
+                            ejecutar_db("UPDATE plantilla SET es_titular = 0 WHERE id = ?", (id_jugador,), commit=True)
+                            st.rerun()
+                    else:
+                        if st.button("⬆️ Subir", key=f"up_{id_jugador}"):
+                            actual = len([p for p in titulares if p[1] == pk])
+                            lim = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
+                            if len(titulares) < 11 and actual < lim.get(pk, 0):
+                                ejecutar_db("UPDATE plantilla SET es_titular = 1 WHERE id = ?", (id_jugador,), commit=True)
+                                st.rerun()
+                            else: st.error("¡Límite!")
+                        
+                        # --- SEGURIDAD VENDER ---
+                        p_venta = int(j[2]) * 20
+                        key_confirm = f"v_conf_{id_jugador}"
+                        
+                        if not st.session_state.get(key_confirm, False):
+                            if st.button(f"Vender {p_venta} 🪙", key=f"btn_v_{id_jugador}", use_container_width=True):
+                                st.session_state[key_confirm] = True
+                                st.rerun()
+                        else:
+                            st.warning("¿Vender?")
+                            c1, c2 = st.columns(2)
+                            if c1.button("✅", key=f"si_v_{id_jugador}"):
+                                ejecutar_db("DELETE FROM plantilla WHERE id = ?", (id_jugador,), commit=True)
+                                ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (p_venta, u_id), commit=True)
+                                st.session_state[key_confirm] = False
+                                st.rerun()
+                            if c2.button("❌", key=f"no_v_{id_jugador}"):
+                                st.session_state[key_confirm] = False
+                                st.rerun()
 
 # --- 5. AUTENTICACIÓN ---
 with st.sidebar:
@@ -97,126 +134,53 @@ with st.sidebar:
         if password != u_pass:
             st.error("Contraseña incorrecta")
             st.stop()
-        
-        # SI EL LOGIN ES EXITOSO, ACTUALIZAMOS SCORES DESDE EL SHEET
         sincronizar_scores(u_id, df_base)
         st.success(f"Conectado: {manager}")
 
     st.divider()
-    json_backup = generar_backup(u_id)
-    st.download_button("📥 Descargar Backup", json_backup, f"vdt_{manager}.json", "application/json", use_container_width=True)
-
-    if not st.toggle("🔒 Bloquear Reset", value=True):
-        if st.button("🔴 RESETEAR CUENTA", use_container_width=True):
-            ejecutar_db("DELETE FROM plantilla WHERE usuario_id = ?", (u_id,), commit=True)
-            ejecutar_db("UPDATE usuarios SET monedas = 1000, prestigio = 0 WHERE id = ?", (u_id,), commit=True)
-            st.rerun()
+    st.download_button("📥 Backup", generar_backup(u_id), f"vdt_{manager}.json", "application/json")
 
 # --- 6. LÓGICA DE JUEGO ---
-# Volvemos a leer la plantilla (ya actualizada por la función sincronizar_scores)
 jugadores_db = ejecutar_db("SELECT jugador_nombre, posicion, nivel, equipo, score, es_titular, id FROM plantilla WHERE usuario_id = ?", (u_id,))
 titulares = [j for j in jugadores_db if j[5] == 1]
 suplentes = [j for j in jugadores_db if j[5] == 0]
 
-st.markdown("### ⚽ VIRTUAL DT PRO")
+st.markdown(f"### ⚽ VIRTUAL DT PRO: {manager}")
+col_m1, col_m2 = st.columns(2)
+col_m1.metric("Presupuesto", f"{int(monedas)} 🪙")
 
-c1, c2 = st.columns(2)
-c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
-
-if len(titulares) == 11:
-    ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
-    c2.markdown(f"**Balance Jornada:** {ganancia} 🪙")
-    if 'c_cobro' not in st.session_state: st.session_state.c_cobro = False
-    
-    if not st.session_state.c_cobro:
-        if c2.button("💰 COBRAR JORNADA", use_container_width=True):
-            st.session_state.c_cobro = True
-            st.rerun()
+# --- 7. FICHAR CON SEGURIDAD ---
+with st.container():
+    if not st.session_state.get('conf_fichar', False):
+        if st.button("🛒 FICHAR JUGADOR (50 🪙)", use_container_width=True):
+            if monedas >= 50:
+                st.session_state.conf_fichar = True
+                st.rerun()
+            else: st.error("Sin monedas")
     else:
-        if c2.button("⚠️ CONFIRMAR COBRO", type="primary", use_container_width=True):
-            ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (ganancia, u_id), commit=True)
-            st.session_state.c_cobro = False
+        st.warning("¿Confirmas la compra de 50 🪙?")
+        cf1, cf2 = st.columns(2)
+        if cf1.button("✅ COMPRAR", type="primary"):
+            n = df_base.sample(n=1).iloc[0]
+            ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
+                        (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
+            ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
+            st.session_state.conf_fichar = False
             st.rerun()
-        if c2.button("Cancelar"):
-            st.session_state.c_cobro = False
+        if cf2.button("❌ CANCELAR"):
+            st.session_state.conf_fichar = False
             st.rerun()
-else:
-    c2.warning(f"Faltan {11 - len(titulares)} titulares")
 
-with st.expander("💎 Oficina de Prestigio"):
-    st.write(f"Prestigio: **{prestigio} pts**")
-    if st.button(f"Comprar 1 Pto (500 🪙)", use_container_width=True):
-        if monedas >= 500:
-            ejecutar_db("UPDATE usuarios SET monedas = monedas - 500, prestigio = prestigio + 1 WHERE id = ?", (u_id,), commit=True)
-            st.rerun()
-        else: st.error("No tienes monedas.")
+st.divider()
+st.subheader("🏃 TITULARES")
+dibujar_plantilla(titulares, "titular", u_id, monedas, titulares)
 
-# --- 7. RENDERIZADO ---
-MAPPING_POS = {"ARQ": "Arquero", "DEF": "Defensores", "VOL": "Volantes", "DEL": "Delanteros"}
-
-def dibujar_plantilla(lista, modo="titular"):
-    posiciones = ["ARQ", "DEF", "VOL", "DEL"]
-    cols = st.columns(4)
-    for i, pk in enumerate(posiciones):
-        with cols[i]:
-            st.markdown(f"**{MAPPING_POS[pk]}**")
-            for j in [x for x in lista if x[1] == pk]:
-                # j[6] es el ID único del jugador en la base de datos
-                id_jugador = j[6] 
-                
-                with st.expander(f"{j[0]}"):
-                    st.caption(f"{j[3]} | {'★' * int(j[2])}")
-                    st.write(f"Score: **{j[4]}**")
-                    
-                    if modo == "titular":
-                        if st.button("⬇️ Bajar", key=f"down_{id_jugador}"):
-                            ejecutar_db("UPDATE plantilla SET es_titular = 0 WHERE id = ?", (id_jugador,), commit=True)
-                            st.rerun()
-                    else:
-                        if st.button("⬆️ Subir", key=f"up_{id_jugador}"):
-                            actual = len([p for p in titulares if p[1] == pk])
-                            lim = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
-                            if len(titulares) < 11 and actual < lim.get(pk, 0):
-                                ejecutar_db("UPDATE plantilla SET es_titular = 1 WHERE id = ?", (id_jugador,), commit=True)
-                                st.rerun()
-                            else: 
-                                st.error("¡Límite!")
-                        
-                        # --- SISTEMA DE SEGURIDAD PARA VENTA ---
-                        p_venta = int(j[2]) * 20
-                        confirm_key = f"vender_conf_{id_jugador}"
-                        
-                        if confirm_key not in st.session_state:
-                            st.session_state[confirm_key] = False
-
-                        if not st.session_state[confirm_key]:
-                            # Botón inicial de venta
-                            if st.button(f"Vender {p_venta} 🪙", key=f"btn_v_{id_jugador}", use_container_width=True):
-                                st.session_state[confirm_key] = True
-                                st.rerun()
-                        else:
-                            # Interfaz de confirmación
-                            st.warning("¿Seguro?")
-                            c_v1, c_v2 = st.columns(2)
-                            with c_v1:
-                                if st.button("✅ SI", key=f"si_{id_jugador}", type="primary", use_container_width=True):
-                                    ejecutar_db("DELETE FROM plantilla WHERE id = ?", (id_jugador,), commit=True)
-                                    ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (p_venta, u_id), commit=True)
-                                    st.session_state[confirm_key] = False
-                                    st.rerun()
-                            with c_v2:
-                                if st.button("❌ NO", key=f"no_{id_jugador}", use_container_width=True):
-                                    st.session_state[confirm_key] = False
-                                    st.rerun()
+st.divider()
+st.subheader("📦 SUPLENTES")
+dibujar_plantilla(suplentes, "suplente", u_id, monedas, titulares)
 
 # --- 8. RANKING ---
-st.divider()
 with st.expander("🏆 RANKING"):
     usrs = ejecutar_db("SELECT id, nombre, monedas, prestigio FROM usuarios")
-    lb = []
-    for u in usrs:
-        val_j = sum([x[0]*20 for x in ejecutar_db("SELECT nivel FROM plantilla WHERE usuario_id=?", (u[0],))])
-        total = int(u[2] + val_j + (u[3]*100))
-        lb.append({"Manager": u[1], "Valor Total 💎": total, "Prestigio": u[3]})
-    if lb:
-        st.table(pd.DataFrame(lb).sort_values("Valor Total 💎", ascending=False))
+    lb = [{"Manager": u[1], "Total": int(u[2] + u[3]*100)} for u in usrs]
+    st.table(pd.DataFrame(lb).sort_values("Total", ascending=False))
