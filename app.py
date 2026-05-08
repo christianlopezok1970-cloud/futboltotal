@@ -161,41 +161,53 @@ def dibujar_plantilla(lista, modo="titular"):
         with cols[i]:
             st.markdown(f"**{MAPPING_POS[pk]}**")
             for j in [x for x in lista if x[1] == pk]:
+                # j[6] es el ID único del jugador en la base de datos
+                id_jugador = j[6] 
+                
                 with st.expander(f"{j[0]}"):
                     st.caption(f"{j[3]} | {'★' * int(j[2])}")
-                    st.write(f"Score: **{j[4]}**") # Aquí se verá el score actualizado
+                    st.write(f"Score: **{j[4]}**")
+                    
                     if modo == "titular":
-                        if st.button("⬇️ Bajar", key=f"down_{j[6]}"):
-                            ejecutar_db("UPDATE plantilla SET es_titular = 0 WHERE id = ?", (j[6],), commit=True)
+                        if st.button("⬇️ Bajar", key=f"down_{id_jugador}"):
+                            ejecutar_db("UPDATE plantilla SET es_titular = 0 WHERE id = ?", (id_jugador,), commit=True)
                             st.rerun()
                     else:
-                        if st.button("⬆️ Subir", key=f"up_{j[6]}"):
+                        if st.button("⬆️ Subir", key=f"up_{id_jugador}"):
                             actual = len([p for p in titulares if p[1] == pk])
                             lim = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
                             if len(titulares) < 11 and actual < lim.get(pk, 0):
-                                ejecutar_db("UPDATE plantilla SET es_titular = 1 WHERE id = ?", (j[6],), commit=True)
+                                ejecutar_db("UPDATE plantilla SET es_titular = 1 WHERE id = ?", (id_jugador,), commit=True)
                                 st.rerun()
-                            else: st.error("Límite!")
+                            else: 
+                                st.error("¡Límite!")
                         
+                        # --- SISTEMA DE SEGURIDAD PARA VENTA ---
                         p_venta = int(j[2]) * 20
-                        if st.button(f"Vender {p_venta} 🪙", key=f"v_{j[6]}", use_container_width=True):
-                            ejecutar_db("DELETE FROM plantilla WHERE id = ?", (j[6],), commit=True)
-                            ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (p_venta, u_id), commit=True)
-                            st.rerun()
+                        confirm_key = f"vender_conf_{id_jugador}"
+                        
+                        if confirm_key not in st.session_state:
+                            st.session_state[confirm_key] = False
 
-st.divider()
-st.subheader("🏃 TITULARES")
-dibujar_plantilla(titulares, "titular")
-st.divider()
-st.subheader("📦 SUPLENTES")
-if st.button("🛒 FICHAR JUGADOR (50 🪙)", use_container_width=True):
-    if monedas >= 50:
-        n = df_base.sample(n=1).iloc[0]
-        ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
-                    (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
-        ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
-        st.rerun()
-dibujar_plantilla(suplentes, "suplente")
+                        if not st.session_state[confirm_key]:
+                            # Botón inicial de venta
+                            if st.button(f"Vender {p_venta} 🪙", key=f"btn_v_{id_jugador}", use_container_width=True):
+                                st.session_state[confirm_key] = True
+                                st.rerun()
+                        else:
+                            # Interfaz de confirmación
+                            st.warning("¿Seguro?")
+                            c_v1, c_v2 = st.columns(2)
+                            with c_v1:
+                                if st.button("✅ SI", key=f"si_{id_jugador}", type="primary", use_container_width=True):
+                                    ejecutar_db("DELETE FROM plantilla WHERE id = ?", (id_jugador,), commit=True)
+                                    ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (p_venta, u_id), commit=True)
+                                    st.session_state[confirm_key] = False
+                                    st.rerun()
+                            with c_v2:
+                                if st.button("❌ NO", key=f"no_{id_jugador}", use_container_width=True):
+                                    st.session_state[confirm_key] = False
+                                    st.rerun()
 
 # --- 8. RANKING ---
 st.divider()
