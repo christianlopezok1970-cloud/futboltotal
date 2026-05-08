@@ -70,7 +70,6 @@ with st.sidebar:
         st.success(f"Bienvenido, {manager}")
 
 # --- 5. LÓGICA DE JUEGO (Sincronización con DB) ---
-# Cargar jugadores del usuario desde DB
 jugadores_db = ejecutar_db("SELECT jugador_nombre, posicion, nivel, equipo, score, es_titular, id FROM plantilla WHERE usuario_id = ?", (u_id,))
 titulares = [j for j in jugadores_db if j[5] == 1]
 suplentes = [j for j in jugadores_db if j[5] == 0]
@@ -79,16 +78,31 @@ st.markdown(f"### ⚽ VIRTUAL DT - Manager: {manager}")
 
 c_pres, c_recom = st.columns(2)
 c_pres.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
-# Cálculo de balance (Lógica original)
+
+# --- BLOQUE CORREGIDO CON SEGURIDAD ---
 if len(titulares) == 11:
     ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
     c_recom.markdown(f"**Balance Proyectado:** \n{ganancia} 🪙")
-    if c_recom.button("💰 COBRAR JORNADA"):
-        ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (ganancia, u_id), commit=True)
-        st.rerun()
+    
+    if 'confirmar_cobro' not in st.session_state:
+        st.session_state.confirmar_cobro = False
+
+    if not st.session_state.confirmar_cobro:
+        if c_recom.button("💰 COBRAR JORNADA", use_container_width=True):
+            st.session_state.confirmar_cobro = True
+            st.rerun()
+    else:
+        col_si, col_no = c_recom.columns(2)
+        if col_si.button("⚠️ CONFIRMAR", type="primary", use_container_width=True):
+            ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (ganancia, u_id), commit=True)
+            st.session_state.confirmar_cobro = False
+            st.toast(f"¡Cobraste {ganancia} monedas!")
+            st.rerun()
+        if col_no.button("CANCELAR", use_container_width=True):
+            st.session_state.confirmar_cobro = False
+            st.rerun()
 else:
     c_recom.warning(f"Faltan {11 - len(titulares)} titulares")
-
 # --- 6. RENDERIZADO DE CANCHA ---
 MAPPING_POS = {"ARQ": "Arquero", "DEF": "Defensores", "VOL": "Volantes", "DEL": "Delanteros"}
 
