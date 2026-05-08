@@ -116,7 +116,7 @@ def dibujar_plantilla(lista, modo="titular"):
             jugs_pos = [j for j in lista if j[1] == pos_key]
             for j in jugs_pos:
                 with st.expander(f"{j[0]}"):
-                    st.caption(f"{j[3]} | ★{j[2]}")
+                    st.caption(f"{j[3]} | {'★' * int(j[2])}")
                     st.write(f"Score: {j[4]}")
                     
                     if modo == "titular":
