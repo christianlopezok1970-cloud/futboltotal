@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import json
+import base64
 from datetime import datetime
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
@@ -17,32 +18,44 @@ def ejecutar_db(query, params=(), commit=False):
 
 # Inicializar Tablas
 ejecutar_db('''CREATE TABLE IF NOT EXISTS usuarios 
-             (id INTEGER PRIMARY KEY, nombre TEXT UNIQUE, password TEXT, 
-              monedas REAL, prestigio INTEGER DEFAULT 0, ultimo_resultado REAL DEFAULT 0)''', commit=True)
+             (id INTEGER PRIMARY KEY, nombre TEXT UNIQUE, password TEXT, monedas REAL)''', commit=True)
 
-# Parches de seguridad para columnas nuevas
-try: ejecutar_db("ALTER TABLE usuarios ADD COLUMN prestigio INTEGER DEFAULT 0", commit=True)
-except: pass
-try: ejecutar_db("ALTER TABLE usuarios ADD COLUMN ultimo_resultado REAL DEFAULT 0", commit=True)
-except: pass
+# PARCHE DE SEGURIDAD: Intentar añadir 'prestigio' por si la DB es vieja
+try:
+    ejecutar_db("ALTER TABLE usuarios ADD COLUMN prestigio INTEGER DEFAULT 0", commit=True)
+except:
+    pass
 
 ejecutar_db('''CREATE TABLE IF NOT EXISTS plantilla 
-             (id INTEGER PRIMARY KEY, usuario_id INTEGER, jugador_nombre TEXT UNIQUE, 
+             (id INTEGER PRIMARY KEY, usuario_id INTEGER, jugador_nombre TEXT, 
               posicion TEXT, nivel INTEGER, equipo TEXT, score REAL, es_titular INTEGER)''', commit=True)
 
 # --- 2. FUNCIONES DE APOYO ---
 def generar_backup(u_id):
-    user_data = ejecutar_db("SELECT nombre, monedas, prestigio, ultimo_resultado FROM usuarios WHERE id = ?", (u_id,))
+    user_data = ejecutar_db("SELECT nombre, monedas, prestigio FROM usuarios WHERE id = ?", (u_id,))
     if not user_data: return "{}"
     user = user_data[0]
     plantilla = ejecutar_db("SELECT jugador_nombre, posicion, nivel, equipo, score, es_titular FROM plantilla WHERE usuario_id = ?", (u_id,))
-    return json.dumps({
-        "manager": user[0], "monedas": user[1], "prestigio": user[2], "puntos_fecha": user[3],
-        "jugadores": [{"nombre": j[0], "pos": j[1], "nivel": j[2], "equipo": j[3], "score": j[4], "titular": j[5]} for j in plantilla]
-    }, indent=4)
+    
+    data = {
+        "manager": user[0],
+        "monedas": user[1],
+        "prestigio_comprado": user[2],
+        "jugadores": [
+            {"nombre": j[0], "pos": j[1], "nivel": j[2], "equipo": j[3], "score": j[4], "titular": j[5]} 
+            for j in plantilla
+        ]
+    }
+    return json.dumps(data, indent=4)
 
 # --- 3. ESTILO VISUAL ---
-st.markdown("<style>.stApp { background: linear-gradient(180deg, #0e1117 0%, #000814 100%); } .stMetric { background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; }</style>", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+    .stApp { background: linear-gradient(180deg, #0e1117 0%, #000814 100%); }
+    .stMetric { background-color: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; }
+    h1, h2, h3 { color: #f0f2f6 !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- 4. CARGA DE DATOS ---
 @st.cache_data
@@ -61,73 +74,77 @@ df_base = load_data()
 
 # --- 5. AUTENTICACIÓN ---
 with st.sidebar:
-    st.title("🛡️ ACCESO")
+    st.title("🛡️ ACCESO MANAGER")
     manager = st.text_input("Manager").strip()
     password = st.text_input("Password", type="password").strip()
 
     if not manager or not password:
-        st.info("Ingresa para jugar.")
+        st.info("Ingresa tus credenciales.")
         st.stop()
 
-    datos = ejecutar_db("SELECT id, monedas, prestigio, ultimo_resultado, password FROM usuarios WHERE nombre = ?", (manager,))
+    datos = ejecutar_db("SELECT id, monedas, prestigio, password FROM usuarios WHERE nombre = ?", (manager,))
+    
     if not datos:
-        if st.button("CREAR CUENTA"):
-            ejecutar_db("INSERT INTO usuarios (nombre, password, monedas, prestigio, ultimo_resultado) VALUES (?, ?, 1000, 0, 0)", (manager, password), commit=True)
-            st.success("¡Creado! Reingresa.")
+        if st.button("CREAR NUEVA CUENTA"):
+            ejecutar_db("INSERT INTO usuarios (nombre, password, monedas, prestigio) VALUES (?, ?, 1000, 0)", (manager, password), commit=True)
+            st.success("¡Cuenta creada! Reingresa.")
             st.rerun()
         st.stop()
     else:
-        u_id, monedas, prestigio, ult_res, u_pass = datos[0]
-        if password != u_pass: st.error("Error de password"); st.stop()
+        u_id, monedas, prestigio, u_pass = datos[0]
+        if password != u_pass:
+            st.error("Contraseña incorrecta")
+            st.stop()
         st.success(f"Conectado: {manager}")
 
     st.divider()
+    json_backup = generar_backup(u_id)
+    st.download_button("📥 Descargar Backup", json_backup, f"vdt_{manager}.json", "application/json", use_container_width=True)
+
     if not st.toggle("🔒 Bloquear Reset", value=True):
         if st.button("🔴 RESETEAR CUENTA", use_container_width=True):
             ejecutar_db("DELETE FROM plantilla WHERE usuario_id = ?", (u_id,), commit=True)
-            ejecutar_db("UPDATE usuarios SET monedas = 1000, prestigio = 0, ultimo_resultado = 0 WHERE id = ?", (u_id,), commit=True)
+            ejecutar_db("UPDATE usuarios SET monedas = 1000, prestigio = 0 WHERE id = ?", (u_id,), commit=True)
             st.rerun()
-    st.download_button("📥 Backup JSON", generar_backup(u_id), f"vdt_{manager}.json", use_container_width=True)
 
-# --- 6. LÓGICA DE JUEGO (Competencia con Score Actualizado) ---
+# --- 6. LÓGICA DE JUEGO ---
 jugadores_db = ejecutar_db("SELECT jugador_nombre, posicion, nivel, equipo, score, es_titular, id FROM plantilla WHERE usuario_id = ?", (u_id,))
 titulares = [j for j in jugadores_db if j[5] == 1]
 suplentes = [j for j in jugadores_db if j[5] == 0]
 
 st.markdown("### ⚽ VIRTUAL DT PRO")
-c1, c2, c3 = st.columns(3)
-c1.metric("Presupuesto", f"{int(monedas)} 🪙")
-c2.metric("Nivel Club", f"{prestigio} 💎")
-c3.metric("Puntos Última Fecha", f"{int(ult_res)} pts")
+
+c1, c2 = st.columns(2)
+c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
 
 if len(titulares) == 11:
-    # Cálculo basado estrictamente en el SCORE de la base de datos
-    pts_base = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
-    bonus = prestigio * 10 
-    total_fecha = pts_base + bonus
-    
-    st.info(f"**Suma Score Titulares:** {sum([j[4] for j in titulares]):.1f} | **Puntos Ganados:** {pts_base} + {bonus} (Bonus)")
-    
+    ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
+    c2.markdown(f"**Balance Jornada:** {ganancia} 🪙")
     if 'c_cobro' not in st.session_state: st.session_state.c_cobro = False
     if not st.session_state.c_cobro:
-        if st.button("💰 COBRAR JORNADA", use_container_width=True):
-            st.session_state.c_cobro = True; st.rerun()
+        if c2.button("💰 COBRAR JORNADA", use_container_width=True):
+            st.session_state.c_cobro = True
+            st.rerun()
     else:
-        if st.button("✅ CONFIRMAR Y REGISTRAR RANKING", type="primary", use_container_width=True):
-            ejecutar_db("UPDATE usuarios SET monedas = monedas + ?, ultimo_resultado = ? WHERE id = ?", (total_fecha, total_fecha, u_id), commit=True)
-            st.session_state.c_cobro = False; st.rerun()
-        if st.button("Cancelar"): st.session_state.c_cobro = False; st.rerun()
+        if c2.button("⚠️ CONFIRMAR COBRO", type="primary", use_container_width=True):
+            ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (ganancia, u_id), commit=True)
+            st.session_state.c_cobro = False
+            st.rerun()
+        if c2.button("Cancelar"):
+            st.session_state.c_cobro = False
+            st.rerun()
 else:
-    st.warning(f"Formación incompleta: Necesitas 11 titulares para puntuar (Tienes {len(titulares)}).")
+    c2.warning(f"Faltan {11 - len(titulares)} titulares")
 
 with st.expander("💎 Oficina de Prestigio"):
-    st.write(f"Prestigio actual: {prestigio}. Cada nivel te da +10 monedas extra por fecha.")
-    if st.button("Comprar 1 Nivel (500 🪙)"):
+    st.write(f"Prestigio: **{prestigio} pts**")
+    if st.button(f"Comprar 1 Pto (500 🪙)", use_container_width=True):
         if monedas >= 500:
             ejecutar_db("UPDATE usuarios SET monedas = monedas - 500, prestigio = prestigio + 1 WHERE id = ?", (u_id,), commit=True)
             st.rerun()
+        else: st.error("No tienes monedas.")
 
-# --- 7. RENDERIZADO DE PLANTILLA (Con Score Visible) ---
+# --- 7. RENDERIZADO ---
 MAPPING_POS = {"ARQ": "Arquero", "DEF": "Defensores", "VOL": "Volantes", "DEL": "Delanteros"}
 
 def dibujar_plantilla(lista, modo="titular"):
@@ -137,51 +154,49 @@ def dibujar_plantilla(lista, modo="titular"):
         with cols[i]:
             st.markdown(f"**{MAPPING_POS[pk]}**")
             for j in [x for x in lista if x[1] == pk]:
-                # j[4] es el Score de la base de datos
-                with st.expander(f"{j[0]} | Score: {j[4]}"):
+                with st.expander(f"{j[0]}"):
                     st.caption(f"{j[3]} | {'★' * int(j[2])}")
+                    st.write(f"Score: {j[4]}")
                     if modo == "titular":
-                        if st.button("⬇️ Banco", key=f"d_{j[6]}"):
-                            ejecutar_db("UPDATE plantilla SET es_titular = 0 WHERE id = ?", (j[6],), commit=True); st.rerun()
+                        if st.button("⬇️ Bajar", key=f"down_{j[6]}"):
+                            ejecutar_db("UPDATE plantilla SET es_titular = 0 WHERE id = ?", (j[6],), commit=True)
+                            st.rerun()
                     else:
-                        if st.button("⬆️ Titular", key=f"u_{j[6]}"):
+                        if st.button("⬆️ Subir", key=f"up_{j[6]}"):
+                            actual = len([p for p in titulares if p[1] == pk])
                             lim = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
-                            actual = len([p for p in titulares if p[1]==pk])
-                            if len(titulares) < 11 and actual < lim[pk]:
-                                ejecutar_db("UPDATE plantilla SET es_titular = 1 WHERE id = ?", (j[6],), commit=True); st.rerun()
+                            if len(titulares) < 11 and actual < lim.get(pk, 0):
+                                ejecutar_db("UPDATE plantilla SET es_titular = 1 WHERE id = ?", (j[6],), commit=True)
+                                st.rerun()
+                            else: st.error("Límite!")
                         
-                        p_v = int(j[2]) * 20
-                        if st.button(f"Vender {p_v} 🪙", key=f"v_{j[6]}"):
+                        p_venta = int(j[2]) * 20
+                        if st.button(f"Vender {p_venta} 🪙", key=f"v_{j[6]}", use_container_width=True):
                             ejecutar_db("DELETE FROM plantilla WHERE id = ?", (j[6],), commit=True)
-                            ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (p_v, u_id), commit=True); st.rerun()
+                            ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (p_venta, u_id), commit=True)
+                            st.rerun()
 
 st.divider()
-st.subheader("🏃 FORMACIÓN TITULAR")
+st.subheader("🏃 TITULARES")
 dibujar_plantilla(titulares, "titular")
 st.divider()
-st.subheader("📦 BANCO / MERCADO (Jugadores Únicos)")
-
-if st.button("🛒 FICHAR JUGADOR AL AZAR (50 🪙)", use_container_width=True):
+st.subheader("📦 SUPLENTES")
+if st.button("🛒 FICHAR JUGADOR (50 🪙)", use_container_width=True):
     if monedas >= 50:
-        ocupados = [x[0] for x in ejecutar_db("SELECT jugador_nombre FROM plantilla")]
-        disponibles = df_base[~df_base['Jugador'].isin(ocupados)]
-        if not disponibles.empty:
-            n = disponibles.sample(n=1).iloc[0]
-            try:
-                ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
-                            (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
-                ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
-                st.rerun()
-            except sqlite3.IntegrityError: st.error("Duplicado detectado, intenta de nuevo.")
-        else: st.error("¡Mercado agotado!")
-    else: st.error("Sin monedas.")
-
+        n = df_base.sample(n=1).iloc[0]
+        ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
+                    (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
+        ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
+        st.rerun()
 dibujar_plantilla(suplentes, "suplente")
 
 # --- 8. RANKING ---
 st.divider()
-with st.expander("🏆 RANKING DE LA FECHA"):
-    rank_db = ejecutar_db("SELECT nombre, ultimo_resultado, prestigio FROM usuarios ORDER BY ultimo_resultado DESC, prestigio DESC")
-    if rank_db:
-        lb = [{"Manager": r[0], "Puntos": int(r[1]), "Nivel": r[2]} for r in rank_db]
-        st.table(pd.DataFrame(lb))
+with st.expander("🏆 RANKING"):
+    usrs = ejecutar_db("SELECT id, nombre, monedas, prestigio FROM usuarios")
+    lb = []
+    for u in usrs:
+        val_j = sum([x[0]*20 for x in ejecutar_db("SELECT nivel FROM plantilla WHERE usuario_id=?", (u[0],))])
+        total = int(u[2] + val_j + (u[3]*100))
+        lb.append({"Manager": u[1], "Valor Total 💎": total, "Prestigio": u[3]})
+    st.table(pd.DataFrame(lb).sort_values("Valor Total 💎", ascending=False))
