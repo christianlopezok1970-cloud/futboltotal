@@ -133,10 +133,27 @@ def dibujar_plantilla(lista, modo="titular"):
                             else: st.error("Límite!")
                         
                         precio_venta = int(j[2]) * 20
-                        if st.button(f"Vender ${precio_venta}", key=f"sell_{j[6]}"):
-                            ejecutar_db("DELETE FROM plantilla WHERE id = ?", (j[6],), commit=True)
-                            ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (precio_venta, u_id), commit=True)
-                            st.rerun()
+                        
+                        # Llave única de confirmación para cada jugador en el banco
+                        key_confirmar = f"conf_venda_{j[6]}"
+                        if key_confirmar not in st.session_state:
+                            st.session_state[key_confirmar] = False
+
+                        if not st.session_state[key_confirmar]:
+                            if st.button(f"Vender {precio_venta} 🪙", key=f"sell_{j[6]}", use_container_width=True):
+                                st.session_state[key_confirmar] = True
+                                st.rerun()
+                        else:
+                            st.warning("¿Confirmar venta?")
+                            col_v_si, col_v_no = st.columns(2)
+                            if col_v_si.button("✅", key=f"v_si_{j[6]}", use_container_width=True):
+                                ejecutar_db("DELETE FROM plantilla WHERE id = ?", (j[6],), commit=True)
+                                ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (precio_venta, u_id), commit=True)
+                                st.session_state[key_confirmar] = False # Limpiar estado
+                                st.rerun()
+                            if col_v_no.button("❌", key=f"v_no_{j[6]}", use_container_width=True):
+                                st.session_state[key_confirmar] = False # Cancelar
+                                st.rerun()
 
 st.divider()
 st.subheader("🏃 TITULARES")
