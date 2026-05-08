@@ -78,8 +78,7 @@ suplentes = [j for j in jugadores_db if j[5] == 0]
 st.markdown(f"### ⚽ VIRTUAL DT - Manager: {manager}")
 
 c_pres, c_recom = st.columns(2)
-c_pres.metric("Presupuesto Actual", f"{monedas} 🪙")
-
+c_pres.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
 # Cálculo de balance (Lógica original)
 if len(titulares) == 11:
     ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
