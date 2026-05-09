@@ -15,15 +15,26 @@ def ejecutar_db(query, params=(), commit=False):
         if commit: conn.commit()
         return c.fetchall()
 
-# Inicializar Tablas
+# --- 1. CONFIGURACIÓN E INICIALIZACIÓN DE TABLAS ---
+
+# Tabla de Usuarios (Estructura base)
 ejecutar_db('''CREATE TABLE IF NOT EXISTS usuarios 
              (id INTEGER PRIMARY KEY, nombre TEXT UNIQUE, password TEXT, monedas REAL)''', commit=True)
 
+# Agregamos las columnas nuevas (usamos try/except por si ya existen de ejecuciones previas)
 try:
     ejecutar_db("ALTER TABLE usuarios ADD COLUMN prestigio INTEGER DEFAULT 0", commit=True)
-except:
-    pass
+except: pass
 
+try:
+    ejecutar_db("ALTER TABLE usuarios ADD COLUMN ultima_jornada TEXT DEFAULT ''", commit=True)
+except: pass
+
+try:
+    ejecutar_db("ALTER TABLE usuarios ADD COLUMN ganancias_historicas REAL DEFAULT 0", commit=True)
+except: pass
+
+# Tabla de Plantilla
 ejecutar_db('''CREATE TABLE IF NOT EXISTS plantilla 
              (id INTEGER PRIMARY KEY, usuario_id INTEGER, jugador_nombre TEXT, 
              posicion TEXT, nivel INTEGER, equipo TEXT, score REAL, es_titular INTEGER)''', commit=True)
@@ -154,34 +165,51 @@ if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
                     st.success(f"¡{n['Jugador']} (Nivel 1) se ha unido al equipo!")
                     st.rerun()
 
-# --- LÓGICA DE COBRO ---
+# --- LÓGICA DE COBRO CON FILTRO DE JORNADA ---
 if len(titulares) == 11:
-    ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
-    c2.markdown(f"**Balance Jornada:** {ganancia} 🪙")
-    if 'c_cobro' not in st.session_state: st.session_state.c_cobro = False
+    # 1. Obtener la jornada actual desde la columna G (Jornada)
+    # iloc[0] toma el valor de la primera fila del Excel
+    jornada_actual = str(df_base['Jornada'].iloc[0]) if 'Jornada' in df_base.columns else "S/J"
     
-    if not st.session_state.c_cobro:
-        if c2.button("💰 COBRAR JORNADA", use_container_width=True):
-            st.session_state.c_cobro = True
-            st.rerun()
-    else:
-        if c2.button("⚠️ CONFIRMAR COBRO", type="primary", use_container_width=True):
-            ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (ganancia, u_id), commit=True)
-            st.session_state.c_cobro = False
-            st.rerun()
-        if c2.button("Cancelar"):
-            st.session_state.c_cobro = False
-            st.rerun()
-else:
-    c2.warning(f"Faltan {11 - len(titulares)} titulares para cobrar")
+    # 2. Consultar qué jornada cobró el usuario por última vez
+    datos_user = ejecutar_db("SELECT ultima_jornada, ganancias_historicas FROM usuarios WHERE id = ?", (u_id,))
+    ultima_cobrada = datos_user[0][0] if datos_user else ""
 
-with st.expander("💎 Oficina de Prestigio"):
-    st.write(f"Prestigio: **{prestigio} pts**")
-    if st.button(f"Comprar 1 Pto (500 🪙)", use_container_width=True):
-        if monedas >= 500:
-            ejecutar_db("UPDATE usuarios SET monedas = monedas - 500, prestigio = prestigio + 1 WHERE id = ?", (u_id,), commit=True)
-            st.rerun()
-        else: st.error("No tienes monedas suficientes.")
+    # Cálculo de ganancia
+    ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
+    
+    c2.markdown(f"📅 **{jornada_actual}**")
+    c2.markdown(f"💰 **Ganancia:** {ganancia} 🪙")
+
+    # 3. Validación de cobro duplicado
+    if ultima_cobrada == jornada_actual:
+        c2.success(f"✅ La {jornada_actual} ya fue acreditada.")
+    else:
+        if 'c_cobro' not in st.session_state: st.session_state.c_cobro = False
+        
+        if not st.session_state.c_cobro:
+            if c2.button("💰 COBRAR JORNADA", use_container_width=True):
+                st.session_state.c_cobro = True
+                st.rerun()
+        else:
+            if c2.button("⚠️ CONFIRMAR COBRO", type="primary", use_container_width=True):
+                # IMPORTANTE: Sumamos a monedas Y a ganancias_historicas para el ranking
+                # También guardamos la jornada actual para bloquear el próximo intento
+                ejecutar_db("""UPDATE usuarios SET 
+                            monedas = monedas + ?, 
+                            ganancias_historicas = ganancias_historicas + ?,
+                            ultima_jornada = ? 
+                            WHERE id = ?""", 
+                            (ganancia, max(0, ganancia), jornada_actual, u_id), commit=True)
+                
+                st.session_state.c_cobro = False
+                st.success(f"¡{jornada_actual} cobrada correctamente!")
+                st.rerun()
+            if c2.button("Cancelar"):
+                st.session_state.c_cobro = False
+                st.rerun()
+else:
+    c2.warning(f"Faltan {11 - len(titulares)} titulares")
 
 # --- 7. RENDERIZADO DE PLANTILLA ---
 MAPPING_POS = {"ARQ": "Arquero", "DEF": "Defensores", "VOL": "Volantes", "DEL": "Delanteros"}
