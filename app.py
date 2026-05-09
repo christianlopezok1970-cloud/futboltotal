@@ -121,7 +121,16 @@ st.markdown("### ⚽ VIRTUAL DT PRO")
 
 c1, c2 = st.columns(2)
 c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
+total_jugadores = len(titulares) + len(suplentes)
 
+if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
+    st.error("🚨 CRISIS: No puedes completar tu equipo ni tienes fondos.")
+    with st.expander("SOLICITAR FONDO DE EMERGENCIA"):
+        st.write("La liga te otorga 50 🪙 para que puedas realizar un fichaje y continuar.")
+        if st.button("Recibir 50 🪙"):
+            ejecutar_db("UPDATE usuarios SET monedas = monedas + 50 WHERE id = ?", (u_id,), commit=True)
+            st.success("¡50 monedas acreditadas!")
+            st.rerun()
 if len(titulares) == 11:
     ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
     c2.markdown(f"**Balance Jornada:** {ganancia} 🪙")
