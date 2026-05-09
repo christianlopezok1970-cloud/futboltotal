@@ -121,16 +121,53 @@ st.markdown("### ⚽ VIRTUAL DT PRO")
 
 c1, c2 = st.columns(2)
 c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
-total_jugadores = len(titulares) + len(suplentes)
+# --- 6. LÓGICA DE JUEGO (PROYECTO ACTUALIZADO) ---
+st.markdown("### ⚽ VIRTUAL DT PRO")
 
-if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
-    st.error("🚨 CRISIS: No puedes completar tu equipo ni tienes fondos.")
-    with st.expander("SOLICITAR FONDO DE EMERGENCIA"):
-        st.write("La liga te otorga 50 🪙 para que puedas realizar un fichaje y continuar.")
-        if st.button("Recibir 50 🪙"):
-            ejecutar_db("UPDATE usuarios SET monedas = monedas + 50 WHERE id = ?", (u_id,), commit=True)
-            st.success("¡50 monedas acreditadas!")
-            st.rerun()
+c1, c2 = st.columns(2)
+c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
+
+# --- NUEVO SISTEMA DE RESCATE: FICHAJE DE EMERGENCIA ---
+total_jugadores = len(titulares) + len(suplentes)
+valor_club = sum([int(j[2]) * 15 for j in jugadores_db])
+
+# Se activa si: No completa 11, No tiene 50 monedas, NO TIENE SUPLENTES y el club vale poco
+if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0 and (monedas + valor_club) < 50:
+    st.error("🚨 CRISIS DE PLANTILLA: No tienes fondos para completar los 11 titulares.")
+    
+    posiciones_actuales = [j[1] for j in titulares]
+    formacion_ideal = ['ARQ', 'DEF', 'DEF', 'DEF', 'DEF', 'VOL', 'VOL', 'VOL', 'VOL', 'DEL', 'DEL']
+    
+    posicion_faltante = None
+    temp_pos = posiciones_actuales.copy()
+    for p in formacion_ideal:
+        if p in temp_pos:
+            temp_pos.remove(p)
+        else:
+            posicion_faltante = p
+            break
+            
+    if posicion_faltante:
+        with st.expander(f"SOLICITAR REFUERZO GRATUITO ({posicion_faltante})"):
+            st.write(f"La liga te asignará un jugador de **Nivel 1** en la posición de **{posicion_faltante}**.")
+            if st.button("Fichar Refuerzo de Emergencia"):
+                # Buscamos nivel 1 en la posición faltante
+                pool = df_base[(df_base['POS'] == posicion_faltante) & (df_base['Nivel'] == 1)]
+                if pool.empty:
+                    pool = df_base[df_base['POS'] == posicion_faltante].sort_values('Nivel')
+
+                if not pool.empty:
+                    n = pool.sample(n=1).iloc[0]
+                    # Se inserta como TITULAR y con NIVEL 1 forzado para evitar reventa
+                    ejecutar_db("""INSERT INTO plantilla 
+                                (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) 
+                                VALUES (?,?,?,1,?,?,1)""", 
+                                (u_id, n['Jugador'], n['POS'], n['Equipo'], float(n['Score'])), 
+                                commit=True)
+                    st.success(f"¡{n['Jugador']} (Nivel 1) se ha unido al equipo!")
+                    st.rerun()
+
+# --- LÓGICA DE COBRO ---
 if len(titulares) == 11:
     ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
     c2.markdown(f"**Balance Jornada:** {ganancia} 🪙")
