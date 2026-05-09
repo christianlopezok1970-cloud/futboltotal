@@ -281,10 +281,10 @@ def dibujar_plantilla(lista, modo="titular"):
                                 st.rerun()
 
 st.divider()
-st.subheader("🏃 TITULARES")
+st.subheader("TITULARES")
 dibujar_plantilla(titulares, "titular")
 st.divider()
-st.subheader("📦 SUPLENTES")
+st.subheader("SUPLENTES")
 
 if not st.session_state.get('conf_fichar', False):
     if st.button("🛒 FICHAR JUGADOR (50 🪙)", use_container_width=True):
@@ -310,7 +310,7 @@ dibujar_plantilla(suplentes, "suplente")
 
 # --- 8. RANKING DE LIGA OFICIAL ---
 st.divider()
-st.subheader("🏆 TABLA DE POSICIONES (RANKING OFICIAL)")
+st.subheader("🏆 TABLA DE POSICIONES")
 leaderboard = ejecutar_db("SELECT nombre, pj, dg, pts_liga FROM usuarios ORDER BY pts_liga DESC, dg DESC")
 
 if leaderboard:
