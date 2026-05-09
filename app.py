@@ -297,6 +297,9 @@ else:
     cf1, cf2 = st.columns(2)
     if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
         n = df_base.sample(n=1).iloc[0]
+        with st.spinner("🕵️‍♂️ Buscando talento..."):
+            import time
+            time.sleep(2.5) # Aquí ajustas los segundos de espera
         ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
                     (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
         ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
