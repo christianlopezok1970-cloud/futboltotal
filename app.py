@@ -160,7 +160,7 @@ if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
             
     if posicion_faltante:
         with st.expander(f"SOLICITAR REFUERZO GRATUITO ({posicion_faltante})"):
-            st.write(f"La liga te asignará un jugador de **Nivel 1** en la posición de **{posicion_faltante}**.")
+            st.write(f"La liga te asignará un jugador en la posición de **{posicion_faltante}**.")
             if st.button("Fichar Refuerzo de Emergencia"):
                 pool = df_base[(df_base['POS'] == posicion_faltante) & (df_base['Nivel'] == 0)]
                 if pool.empty:
