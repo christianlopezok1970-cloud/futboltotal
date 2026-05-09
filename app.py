@@ -168,12 +168,12 @@ if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
 
                 if not pool.empty:
                     n = pool.sample(n=1).iloc[0]
-                    ejecutar_db("""INSERT INTO plantilla 
+                   ejecutar_db("""INSERT INTO plantilla 
                                 (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) 
-                                VALUES (?,?,?,1,?,?,1)""", 
-                                (u_id, n['Jugador'], n['POS'], n['Equipo'], float(n['Score'])), 
+                                VALUES (?,?,?,?,?,?,1)""", # <--- Cambiamos el 1 por un ?
+                                (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), # <--- Agregamos int(n['Nivel']) aquí
                                 commit=True)
-                    st.success(f"¡{n['Jugador']} (Nivel 1) se ha unido al equipo!")
+                    st.success(f"¡{n['Jugador']} (Nivel {n['Nivel']}) se ha unido al equipo!")
                     st.rerun()
 
 # --- LÓGICA DE COBRO CON FILTRO DE JORNADA Y SIMULACIÓN ---
