@@ -332,10 +332,10 @@ if leaderboard:
         tabla_liga.append({
             "Pos": medalla, 
             "Manager": nom, 
+            "PTS": pts,           # <--- Ahora se ve primero el puntaje
             "PJ": pj, 
             "DG": dg, 
-            "Ganancia": f"{int(gan)} 🪙", 
-            "PTS": pts
+            "Ganancia": f"{int(gan)} 🪙"
         })
     
     # Mostramos la tabla final
