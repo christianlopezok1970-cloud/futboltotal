@@ -293,34 +293,43 @@ if not st.session_state.get('conf_fichar', False):
             st.rerun()
         else: st.error("No tienes suficientes monedas.")
 else:
-        st.warning("¿Quieres gastar 50 🪙?")
-        cf1, cf2 = st.columns(2)
+        # Creamos un contenedor vacío para los botones de confirmación
+        contenedor_compra = st.empty()
         
-        if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
-            # 1. Elegimos al azar ANTES del suspenso para tener el dato listo
-            n = df_base.sample(n=1).iloc[0]
+        with contenedor_compra.container():
+            st.warning("¿Quieres gastar 50 🪙?")
+            cf1, cf2 = st.columns(2)
             
-            # 2. SUSPENSO: El spinner necesita que el código de adentro esté identado
-            with st.spinner("✨ ¡Buscando en el mercado de pases! ✨"):
-                import time # Lo ideal es que esté al inicio del archivo, pero aquí funciona
-                time.sleep(2.5) 
-            
-            # 3. OPERACIONES DE BASE DE DATOS
-            ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
-                        (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
-            ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
-            
-            # 4. FEEDBACK VISUAL (Dopamina)
-            st.balloons()
-            st.success(f"✨ ¡FICHADO: {n['Jugador']}! ✨")
-            
-            # 5. ACTUALIZAMOS EL ESTADO
-            st.session_state.conf_fichar = False
-            # No ponemos st.rerun() para que los globos no desaparezcan al instante
+            # Botón CANCELAR (este sí puede tener rerun porque no hay globos)
+            if cf2.button("❌ CANCELAR", key="fichar_no", use_container_width=True):
+                st.session_state.conf_fichar = False
+                st.rerun()
 
-        if cf2.button("❌ CANCELAR", key="fichar_no", use_container_width=True):
-            st.session_state.conf_fichar = False
-            st.rerun()
+            # Botón COMPRAR
+            if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
+                n = df_base.sample(n=1).iloc[0]
+                
+                # 1. Limpiamos el contenedor INMEDIATAMENTE (apaga el botón)
+                contenedor_compra.empty()
+                st.session_state.conf_fichar = False
+                
+                # 2. SUSPENSO
+                with st.spinner("¡Buscando en el mercado de pases!"):
+                    import time
+                    time.sleep(2) 
+                
+                # 3. BASE DE DATOS
+                ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
+                            (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
+                ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
+                
+                # 4. CELEBRACIÓN
+                st.balloons()
+                st.success(f"¡FICHADO: {n['Jugador']}!")
+                
+                # Agregamos un botón pequeño para "continuar" o refrescar manualmente si el usuario quiere
+                if st.button("Ver mi nueva plantilla"):
+                    st.rerun()
 
 dibujar_plantilla(suplentes, "suplente")
 
