@@ -293,18 +293,27 @@ if not st.session_state.get('conf_fichar', False):
             st.rerun()
         else: st.error("No tienes suficientes monedas.")
 else:
-    st.warning("¿Quieres gastar 50 🪙?")
-    cf1, cf2 = st.columns(2)
-    if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
-        n = df_base.sample(n=1).iloc[0]
-        ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
-                    (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
-        ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
-        st.session_state.conf_fichar = False
-        st.rerun()
-    if cf2.button("❌ CANCELAR", key="fichar_no", use_container_width=True):
-        st.session_state.conf_fichar = False
-        st.rerun()
+        st.warning("¿Quieres gastar 50 🪙?")
+        cf1, cf2 = st.columns(2)
+        if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
+            n = df_base.sample(n=1).iloc[0]
+            
+            # --- EFECTO DE DOPAMINA ---
+            st.balloons() 
+            
+            ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
+                        (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
+            ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
+            
+            # Mensaje emocionante antes de recargar
+            st.success(f"✨ ¡FICHADO: {n['Jugador']}! ✨")
+            
+            st.session_state.conf_fichar = False
+            st.rerun()
+
+        if cf2.button("❌ CANCELAR", key="fichar_no", use_container_width=True):
+            st.session_state.conf_fichar = False
+            st.rerun()
 
 dibujar_plantilla(suplentes, "suplente")
 
