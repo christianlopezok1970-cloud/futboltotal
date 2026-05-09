@@ -322,7 +322,7 @@ if leaderboard:
 # --- HERRAMIENTA TEMPORAL DE LIMPIEZA ---
 with st.sidebar.expander("⚠️ Zona de Administración"):
     pin = st.text_input("PIN de Seguridad", type="password")
-    if pin == "1234": # Cambia esto por tu clave
+    if pin == "2020": # Cambia esto por tu clave
         usuario_a_borrar = st.text_input("Nombre del usuario a borrar")
         if st.button("BORRAR USUARIO DEFINITIVAMENTE"):
             user_id_data = ejecutar_db("SELECT id FROM usuarios WHERE nombre = ?", (usuario_a_borrar,))
