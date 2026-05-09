@@ -298,18 +298,21 @@ else:
         if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
             n = df_base.sample(n=1).iloc[0]
             
-            # --- EFECTO DE DOPAMINA ---
-            st.balloons() 
-            
+            # 1. Realizamos las operaciones en la base de datos primero
             ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
                         (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
             ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
             
-            # Mensaje emocionante antes de recargar
+            # 2. LIMPIAMOS el estado de confirmación para que el botón desaparezca
+            st.session_state.conf_fichar = False
+            
+            # 3. LANZAMOS los globos y el mensaje (SIN EL RERUN INMEDIATO)
+            st.balloons()
             st.success(f"✨ ¡FICHADO: {n['Jugador']}! ✨")
             
-            st.session_state.conf_fichar = False
-            st.rerun()
+            # NOTA: Al no haber st.rerun aquí, los globos se verán. 
+            # La página se actualizará sola cuando el usuario haga otra acción 
+            # o puedes dejar que el flujo continúe.
 
         if cf2.button("❌ CANCELAR", key="fichar_no", use_container_width=True):
             st.session_state.conf_fichar = False
