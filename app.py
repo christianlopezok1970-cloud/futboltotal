@@ -314,13 +314,31 @@ dibujar_plantilla(suplentes, "suplente")
 # --- 8. RANKING DE LIGA OFICIAL ---
 st.divider()
 st.subheader("🏆 TABLA DE POSICIONES")
-leaderboard = ejecutar_db("SELECT nombre, pj, dg, pts_liga FROM usuarios ORDER BY pts_liga DESC, dg DESC")
+
+# Consultamos incluyendo las ganancias_historicas y ordenamos por los 3 criterios
+leaderboard = ejecutar_db("""
+    SELECT nombre, pj, dg, pts_liga, ganancias_historicas 
+    FROM usuarios 
+    ORDER BY pts_liga DESC, dg DESC, ganancias_historicas DESC
+""")
 
 if leaderboard:
     tabla_liga = []
-    for i, (nom, pj, dg, pts) in enumerate(leaderboard):
+    for i, (nom, pj, dg, pts, gan) in enumerate(leaderboard):
+        # Asignamos medallas por posición
         medalla = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "🏃"
-        tabla_liga.append({"Pos": medalla, "Manager": nom, "PJ": pj, "DG": dg, "PTS": pts})
+        
+        # Agregamos los datos a la lista que verá el usuario
+        tabla_liga.append({
+            "Pos": medalla, 
+            "Manager": nom, 
+            "PJ": pj, 
+            "DG": dg, 
+            "Ganancia": f"{int(gan)} 🪙", 
+            "PTS": pts
+        })
+    
+    # Mostramos la tabla final
     st.table(pd.DataFrame(tabla_liga))
 
 # --- HERRAMIENTA TEMPORAL DE LIMPIEZA ---
