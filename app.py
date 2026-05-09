@@ -303,6 +303,9 @@ else:
                         (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
             ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
             
+            with st.spinner("✨ ¡Buscando en el mercado de pases! ✨"):
+            import time
+            time.sleep(2.5)
             # 2. LIMPIAMOS el estado de confirmación para que el botón desaparezca
             st.session_state.conf_fichar = False
             
