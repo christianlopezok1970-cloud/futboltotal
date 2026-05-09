@@ -291,45 +291,48 @@ if not st.session_state.get('conf_fichar', False):
         if monedas >= 50:
             st.session_state.conf_fichar = True
             st.rerun()
-        else: st.error("No tienes suficientes monedas.")
+        else:
+            st.error("No tienes suficientes monedas.")
 else:
-        # Creamos un contenedor vacío para los botones de confirmación
-        contenedor_compra = st.empty()
-        
-        with contenedor_compra.container():
+    # Contenedor para manejar la visibilidad
+    contenedor_compra = st.empty()
+    
+    with contenedor_compra.container():
+        # Si el jugador ya fue fichado en este ciclo, mostramos el éxito
+        if st.session_state.get('fichaje_exitoso'):
+            st.balloons()
+            st.success(f"✨ ¡FICHADO: {st.session_state.fichaje_exitoso}! ✨")
+            if st.button("Ver mi nueva plantilla", use_container_width=True):
+                st.session_state.conf_fichar = False
+                st.session_state.fichaje_exitoso = None
+                st.rerun()
+        else:
+            # Menú de confirmación original
             st.warning("¿Quieres gastar 50 🪙?")
             cf1, cf2 = st.columns(2)
             
-            # Botón CANCELAR (este sí puede tener rerun porque no hay globos)
             if cf2.button("❌ CANCELAR", key="fichar_no", use_container_width=True):
                 st.session_state.conf_fichar = False
                 st.rerun()
 
-            # Botón COMPRAR
             if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
                 n = df_base.sample(n=1).iloc[0]
                 
-                # 1. Limpiamos el contenedor INMEDIATAMENTE (apaga el botón)
-                contenedor_compra.empty()
-                st.session_state.conf_fichar = False
-                
-                # 2. SUSPENSO
+                # Proceso de suspenso
                 with st.spinner("¡Buscando en el mercado de pases!"):
                     import time
-                    time.sleep(2) 
+                    time.sleep(2)
                 
-                # 3. BASE DE DATOS
+                # Base de datos
                 ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
                             (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
                 ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
                 
-                # 4. CELEBRACIÓN
-                st.balloons()
-                st.success(f"¡FICHADO: {n['Jugador']}!")
-                
-                # Agregamos un botón pequeño para "continuar" o refrescar manualmente si el usuario quiere
-                if st.button("Ver mi nueva plantilla"):
-                    st.rerun()
+                # Guardamos el nombre para mostrarlo y reiniciamos para mostrar el éxito
+                st.session_state.fichaje_exitoso = n['Jugador']
+                st.rerun()
+
+dibujar_plantilla(suplentes, "suplente")
 
 dibujar_plantilla(suplentes, "suplente")
 
