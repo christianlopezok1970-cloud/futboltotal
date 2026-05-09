@@ -175,8 +175,8 @@ if len(titulares) == 11:
     datos_user = ejecutar_db("SELECT ultima_jornada, ganancias_historicas FROM usuarios WHERE id = ?", (u_id,))
     ultima_cobrada = datos_user[0][0] if datos_user else ""
 
-    # Cálculo de ganancia
-    ganancia = sum([int((j[4]-64)*3) if j[4]>=65 else int(j[4]-65) for j in titulares])
+    # Nueva lógica: Si el score es mayor a 60, suma la diferencia. Si es 60 o menos, suma 0.
+ganancia = sum([int(max(0, j[4] - 60)) for j in titulares])
     
     c2.markdown(f"📅 **{jornada_actual}**")
     c2.markdown(f"💰 **Ganancia:** {ganancia} 🪙")
