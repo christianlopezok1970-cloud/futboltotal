@@ -34,6 +34,17 @@ try:
     ejecutar_db("ALTER TABLE usuarios ADD COLUMN ganancias_historicas REAL DEFAULT 0", commit=True)
 except: pass
 
+# Nuevas columnas para el Ranking de Liga (Simulación de Partidos)
+try:
+    ejecutar_db("ALTER TABLE usuarios ADD COLUMN pts_liga INTEGER DEFAULT 0", commit=True)
+except: pass
+try:
+    ejecutar_db("ALTER TABLE usuarios ADD COLUMN pj INTEGER DEFAULT 0", commit=True)
+except: pass
+try:
+    ejecutar_db("ALTER TABLE usuarios ADD COLUMN dg INTEGER DEFAULT 0", commit=True)
+except: pass
+
 # Tabla de Plantilla
 ejecutar_db('''CREATE TABLE IF NOT EXISTS plantilla 
              (id INTEGER PRIMARY KEY, usuario_id INTEGER, jugador_nombre TEXT, 
@@ -50,7 +61,7 @@ def load_data():
         df['Nivel'] = pd.to_numeric(df['Nivel'], errors='coerce').fillna(1)
         return df
     except:
-        return pd.DataFrame(columns=["Jugador", "POS", "Nivel", "Equipo", "Score"])
+        return pd.DataFrame(columns=["Jugador", "POS", "Nivel", "Equipo", "Score", "Jornada"])
 
 df_base = load_data()
 
@@ -97,7 +108,7 @@ with st.sidebar:
     
     if not datos:
         if st.button("CREAR NUEVA CUENTA"):
-            ejecutar_db("INSERT INTO usuarios (nombre, password, monedas, prestigio) VALUES (?, ?, 1000, 0)", (manager, password), commit=True)
+            ejecutar_db("INSERT INTO usuarios (nombre, password, monedas, prestigio, pts_liga, pj, dg) VALUES (?, ?, 1000, 0, 0, 0, 0)", (manager, password), commit=True)
             st.success("¡Cuenta creada! Reingresa.")
             st.rerun()
         st.stop()
@@ -115,7 +126,7 @@ with st.sidebar:
     if not st.toggle("🔒 Bloquear Reset", value=True):
         if st.button("🔴 RESETEAR CUENTA", use_container_width=True):
             ejecutar_db("DELETE FROM plantilla WHERE usuario_id = ?", (u_id,), commit=True)
-            ejecutar_db("UPDATE usuarios SET monedas = 1000, prestigio = 0 WHERE id = ?", (u_id,), commit=True)
+            ejecutar_db("UPDATE usuarios SET monedas = 1000, prestigio = 0, pts_liga = 0, pj = 0, dg = 0, ganancias_historicas = 0, ultima_jornada = '' WHERE id = ?", (u_id,), commit=True)
             st.rerun()
 
 # --- 6. LÓGICA DE JUEGO ---
@@ -165,23 +176,18 @@ if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
                     st.success(f"¡{n['Jugador']} (Nivel 1) se ha unido al equipo!")
                     st.rerun()
 
-# --- LÓGICA DE COBRO CON FILTRO DE JORNADA ---
+# --- LÓGICA DE COBRO CON FILTRO DE JORNADA Y SIMULACIÓN ---
 if len(titulares) == 11:
-    # 1. Obtener la jornada actual desde la columna G (Jornada)
-    # iloc[0] toma el valor de la primera fila del Excel
     jornada_actual = str(df_base['Jornada'].iloc[0]) if 'Jornada' in df_base.columns else "S/J"
     
-    # 2. Consultar qué jornada cobró el usuario por última vez
     datos_user = ejecutar_db("SELECT ultima_jornada, ganancias_historicas FROM usuarios WHERE id = ?", (u_id,))
     ultima_cobrada = datos_user[0][0] if datos_user else ""
 
-    # Nueva lógica: Si el score es mayor a 60, suma la diferencia. Si es 60 o menos, suma 0.
     ganancia = sum([int(max(0, j[4] - 60)) for j in titulares])
     
     c2.markdown(f"📅 **{jornada_actual}**")
     c2.markdown(f"💰 **Ganancia:** {ganancia} 🪙")
 
-    # 3. Validación de cobro duplicado
     if ultima_cobrada == jornada_actual:
         c2.success(f"✅ La {jornada_actual} ya fue acreditada.")
     else:
@@ -193,17 +199,32 @@ if len(titulares) == 11:
                 st.rerun()
         else:
             if c2.button("⚠️ CONFIRMAR COBRO", type="primary", use_container_width=True):
-                # IMPORTANTE: Sumamos a monedas Y a ganancias_historicas para el ranking
-                # También guardamos la jornada actual para bloquear el próximo intento
+                # Cálculo de Resultado de Fútbol
+                gf, gc, p_pts = 0, 0, 0
+                if ganancia < 40: gf, gc, p_pts = 0, 3, 0
+                elif 40 <= ganancia <= 49: gf, gc, p_pts = 0, 2, 0
+                elif 50 <= ganancia <= 59: gf, gc, p_pts = 0, 1, 0
+                elif 60 <= ganancia <= 99: gf, gc, p_pts = 0, 0, 1
+                elif 100 <= ganancia <= 109: gf, gc, p_pts = 1, 0, 3
+                elif 110 <= ganancia <= 119: gf, gc, p_pts = 2, 0, 3
+                elif 120 <= ganancia <= 129: gf, gc, p_pts = 3, 0, 3
+                elif 130 <= ganancia <= 139: gf, gc, p_pts = 4, 0, 3
+                elif ganancia >= 140: gf, gc, p_pts = 5, 0, 3
+                
+                dg_jornada = gf - gc
+
                 ejecutar_db("""UPDATE usuarios SET 
                             monedas = monedas + ?, 
                             ganancias_historicas = ganancias_historicas + ?,
+                            pts_liga = pts_liga + ?,
+                            pj = pj + 1,
+                            dg = dg + ?,
                             ultima_jornada = ? 
                             WHERE id = ?""", 
-                            (ganancia, max(0, ganancia), jornada_actual, u_id), commit=True)
+                            (ganancia, ganancia, p_pts, dg_jornada, jornada_actual, u_id), commit=True)
                 
                 st.session_state.c_cobro = False
-                st.success(f"¡{jornada_actual} cobrada correctamente!")
+                st.success(f"¡{jornada_actual} Cobrada! Resultado: {gf}-{gc}")
                 st.rerun()
             if c2.button("Cancelar"):
                 st.session_state.c_cobro = False
@@ -239,7 +260,6 @@ def dibujar_plantilla(lista, modo="titular"):
                                 st.rerun()
                             else: st.error("Límite!")
                         
-                        # --- SEGURIDAD EN VENTA (Factor 15) ---
                         p_venta = int(j[2]) * 15
                         confirm_key = f"vender_conf_{id_jugador}"
                         
@@ -265,7 +285,6 @@ dibujar_plantilla(titulares, "titular")
 st.divider()
 st.subheader("📦 SUPLENTES")
 
-# --- SEGURIDAD EN FICHAR ---
 if not st.session_state.get('conf_fichar', False):
     if st.button("🛒 FICHAR JUGADOR (50 🪙)", use_container_width=True):
         if monedas >= 50:
@@ -288,14 +307,14 @@ else:
 
 dibujar_plantilla(suplentes, "suplente")
 
-# --- 8. RANKING ---
+# --- 8. RANKING DE LIGA OFICIAL ---
 st.divider()
-with st.expander("🏆 RANKING"):
-    usrs = ejecutar_db("SELECT id, nombre, monedas, prestigio FROM usuarios")
-    lb = []
-    for u in usrs:
-        val_j = sum([x[0]*15 for x in ejecutar_db("SELECT nivel FROM plantilla WHERE usuario_id=?", (u[0],))])
-        total = int(u[2] + val_j + (u[3]*100))
-        lb.append({"Manager": u[1], "Valor Total 💎": total, "Prestigio": u[3]})
-    if lb:
-        st.table(pd.DataFrame(lb).sort_values("Valor Total 💎", ascending=False))
+st.subheader("🏆 TABLA DE POSICIONES (RANKING OFICIAL)")
+leaderboard = ejecutar_db("SELECT nombre, pj, dg, pts_liga FROM usuarios ORDER BY pts_liga DESC, dg DESC")
+
+if leaderboard:
+    tabla_liga = []
+    for i, (nom, pj, dg, pts) in enumerate(leaderboard):
+        medalla = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "🏃"
+        tabla_liga.append({"Pos": medalla, "Manager": nom, "PJ": pj, "DG": dg, "PTS": pts})
+    st.table(pd.DataFrame(tabla_liga))
