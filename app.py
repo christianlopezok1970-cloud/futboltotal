@@ -291,48 +291,20 @@ if not st.session_state.get('conf_fichar', False):
         if monedas >= 50:
             st.session_state.conf_fichar = True
             st.rerun()
-        else:
-            st.error("No tienes suficientes monedas.")
+        else: st.error("No tienes suficientes monedas.")
 else:
-    # Contenedor para manejar la visibilidad
-    contenedor_compra = st.empty()
-    
-    with contenedor_compra.container():
-        # Si el jugador ya fue fichado en este ciclo, mostramos el éxito
-        if st.session_state.get('fichaje_exitoso'):
-            st.balloons()
-            st.success(f"✨ ¡FICHADO: {st.session_state.fichaje_exitoso}! ✨")
-            if st.button("Ver mi nueva plantilla", use_container_width=True):
-                st.session_state.conf_fichar = False
-                st.session_state.fichaje_exitoso = None
-                st.rerun()
-        else:
-            # Menú de confirmación original
-            st.warning("¿Quieres gastar 50 🪙?")
-            cf1, cf2 = st.columns(2)
-            
-            if cf2.button("❌ CANCELAR", key="fichar_no", use_container_width=True):
-                st.session_state.conf_fichar = False
-                st.rerun()
-
-            if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
-                n = df_base.sample(n=1).iloc[0]
-                
-                # Proceso de suspenso
-                with st.spinner("¡Buscando en el mercado de pases!"):
-                    import time
-                    time.sleep(2)
-                
-                # Base de datos
-                ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
-                            (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
-                ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
-                
-                # Guardamos el nombre para mostrarlo y reiniciamos para mostrar el éxito
-                st.session_state.fichaje_exitoso = n['Jugador']
-                st.rerun()
-
-dibujar_plantilla(suplentes, "suplente")
+    st.warning("¿Quieres gastar 50 🪙?")
+    cf1, cf2 = st.columns(2)
+    if cf1.button("✅ COMPRAR", key="fichar_si", type="primary", use_container_width=True):
+        n = df_base.sample(n=1).iloc[0]
+        ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
+                    (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), commit=True)
+        ejecutar_db("UPDATE usuarios SET monedas = monedas - 50 WHERE id = ?", (u_id,), commit=True)
+        st.session_state.conf_fichar = False
+        st.rerun()
+    if cf2.button("❌ CANCELAR", key="fichar_no", use_container_width=True):
+        st.session_state.conf_fichar = False
+        st.rerun()
 
 dibujar_plantilla(suplentes, "suplente")
 
