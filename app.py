@@ -139,10 +139,7 @@ st.markdown("### ⚽ VIRTUAL DT PRO")
 c1, c2 = st.columns(2)
 c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
 
-# --- SISTEMA DE RESCATE: FICHAJE DE EMERGENCIA ---
-total_jugadores = len(titulares) + len(suplentes)
-valor_club = sum([int(j[2]) * 15 for j in jugadores_db])
-
+# --- SISTEMA DE RESCATE (CORREGIDO) ---
 if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
     st.error(f"🚨 CRISIS DE PLANTILLA: Tienes {int(monedas)} 🪙 pero necesitas 50 para fichar.")
     
@@ -162,17 +159,20 @@ if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
         with st.expander(f"SOLICITAR REFUERZO GRATUITO ({posicion_faltante})"):
             st.write(f"La liga te asignará un jugador en la posición de **{posicion_faltante}**.")
             if st.button("Fichar Refuerzo de Emergencia"):
+                # Buscamos nivel 0 en el Excel
                 pool = df_base[(df_base['POS'] == posicion_faltante) & (df_base['Nivel'] == 0)]
                 if pool.empty:
                     pool = df_base[df_base['POS'] == posicion_faltante].sort_values('Nivel')
 
                 if not pool.empty:
                     n = pool.sample(n=1).iloc[0]
-                   ejecutar_db("""INSERT INTO plantilla 
+                    # Cambio realizado: Se agregaron los 6 '?' y los 6 parámetros correspondientes
+                    ejecutar_db("""INSERT INTO plantilla 
                                 (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) 
-                                VALUES (?,?,?,?,?,?,1)""", # <--- Cambiamos el 1 por un ?
-                                (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), # <--- Agregamos int(n['Nivel']) aquí
+                                VALUES (?, ?, ?, ?, ?, ?, 1)""", 
+                                (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), 
                                 commit=True)
+                    
                     st.success(f"¡{n['Jugador']} (Nivel {n['Nivel']}) se ha unido al equipo!")
                     st.rerun()
 
