@@ -318,3 +318,17 @@ if leaderboard:
         medalla = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "🏃"
         tabla_liga.append({"Pos": medalla, "Manager": nom, "PJ": pj, "DG": dg, "PTS": pts})
     st.table(pd.DataFrame(tabla_liga))
+
+# --- HERRAMIENTA TEMPORAL DE LIMPIEZA ---
+with st.sidebar.expander("⚠️ Zona de Administración"):
+    pin = st.text_input("PIN de Seguridad", type="password")
+    if pin == "1234": # Cambia esto por tu clave
+        usuario_a_borrar = st.text_input("Nombre del usuario a borrar")
+        if st.button("BORRAR USUARIO DEFINITIVAMENTE"):
+            user_id_data = ejecutar_db("SELECT id FROM usuarios WHERE nombre = ?", (usuario_a_borrar,))
+            if user_id_data:
+                u_id_borrar = user_id_data[0][0]
+                ejecutar_db("DELETE FROM plantilla WHERE usuario_id = ?", (u_id_borrar,), commit=True)
+                ejecutar_db("DELETE FROM usuarios WHERE id = ?", (u_id_borrar,), commit=True)
+                st.success(f"Eliminado: {usuario_a_borrar}")
+                st.rerun()
