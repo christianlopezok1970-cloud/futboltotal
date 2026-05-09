@@ -176,7 +176,7 @@ if len(titulares) == 11:
     ultima_cobrada = datos_user[0][0] if datos_user else ""
 
     # Nueva lógica: Si el score es mayor a 60, suma la diferencia. Si es 60 o menos, suma 0.
-ganancia = sum([int(max(0, j[4] - 60)) for j in titulares])
+    ganancia = sum([int(max(0, j[4] - 60)) for j in titulares])
     
     c2.markdown(f"📅 **{jornada_actual}**")
     c2.markdown(f"💰 **Ganancia:** {ganancia} 🪙")
