@@ -134,6 +134,10 @@ jugadores_db = ejecutar_db("SELECT jugador_nombre, posicion, nivel, equipo, scor
 titulares = [j for j in jugadores_db if j[5] == 1]
 suplentes = [j for j in jugadores_db if j[5] == 0]
 
+# --- AQUÍ DEFINIMOS LAS VARIABLES PARA EVITAR EL NAMEERROR ---
+total_jugadores = len(titulares) + len(suplentes)
+valor_club = sum([int(j[2]) * 15 for j in jugadores_db])
+
 st.markdown("### ⚽ VIRTUAL DT PRO")
 
 c1, c2 = st.columns(2)
@@ -159,19 +163,17 @@ if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
         with st.expander(f"SOLICITAR REFUERZO GRATUITO ({posicion_faltante})"):
             st.write(f"La liga te asignará un jugador en la posición de **{posicion_faltante}**.")
             if st.button("Fichar Refuerzo de Emergencia"):
-                # Buscamos nivel 0 en el Excel
                 pool = df_base[(df_base['POS'] == posicion_faltante) & (df_base['Nivel'] == 0)]
                 if pool.empty:
                     pool = df_base[df_base['POS'] == posicion_faltante].sort_values('Nivel')
 
                 if not pool.empty:
                     n = pool.sample(n=1).iloc[0]
-                    # Cambio realizado: Se agregaron los 6 '?' y los 6 parámetros correspondientes
                     ejecutar_db("""INSERT INTO plantilla 
-                                (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) 
-                                VALUES (?, ?, ?, ?, ?, ?, 1)""", 
-                                (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), 
-                                commit=True)
+                                 (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) 
+                                 VALUES (?, ?, ?, ?, ?, ?, 1)""", 
+                                 (u_id, n['Jugador'], n['POS'], int(n['Nivel']), n['Equipo'], float(n['Score'])), 
+                                 commit=True)
                     
                     st.success(f"¡{n['Jugador']} (Nivel {n['Nivel']}) se ha unido al equipo!")
                     st.rerun()
@@ -199,7 +201,6 @@ if len(titulares) == 11:
                 st.rerun()
         else:
             if c2.button("⚠️ CONFIRMAR COBRO", type="primary", use_container_width=True):
-                # Cálculo de Resultado de Fútbol
                 gf, gc, p_pts = 0, 0, 0
                 if ganancia < 40: gf, gc, p_pts = 0, 3, 0
                 elif 40 <= ganancia <= 49: gf, gc, p_pts = 0, 2, 0
@@ -322,7 +323,7 @@ if leaderboard:
 # --- HERRAMIENTA TEMPORAL DE LIMPIEZA ---
 with st.sidebar.expander("⚠️ Zona de Administración"):
     pin = st.text_input("PIN de Seguridad", type="password")
-    if pin == "2020": # Cambia esto por tu clave
+    if pin == "2020": 
         usuario_a_borrar = st.text_input("Nombre del usuario a borrar")
         if st.button("BORRAR USUARIO DEFINITIVAMENTE"):
             user_id_data = ejecutar_db("SELECT id FROM usuarios WHERE nombre = ?", (usuario_a_borrar,))
