@@ -121,8 +121,8 @@ c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
 total_jugadores = len(titulares) + len(suplentes)
 valor_club = sum([int(j[2]) * 15 for j in jugadores_db])
 
-if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0 and (monedas + valor_club) < 50:
-    st.error("🚨 CRISIS DE PLANTILLA: No puedes completar los 11 titulares.")
+if monedas < 50 and total_jugadores < 11 and len(suplentes) == 0:
+    st.error(f"🚨 CRISIS DE PLANTILLA: Tienes {int(monedas)} 🪙 pero necesitas 50 para fichar.")
     
     posiciones_actuales = [j[1] for j in titulares]
     formacion_ideal = ['ARQ', 'DEF', 'DEF', 'DEF', 'DEF', 'VOL', 'VOL', 'VOL', 'VOL', 'DEL', 'DEL']
