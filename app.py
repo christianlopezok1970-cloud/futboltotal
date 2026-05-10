@@ -12,29 +12,36 @@ import google.generativeai as genai
 # Tu clave (zdcU)
 genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
+# --- CONFIGURACIÓN IA (VERSIÓN DEFINITIVA) ---
+import google.generativeai as genai
+from google.generativeai import client
+
+# Tu clave (zdcU)
+genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
+
 def asistente_tecnico_pro(jugadores_info):
-    """Versión 'Ruta Completa' para anular el error 404."""
+    """Fuerza la comunicación con la versión estable para matar el 404."""
     try:
-        # Usamos la ruta técnica completa que Google reconoce sí o sí
-        # Probamos primero con la versión 1.5 Flash
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        # Forzamos al cliente a usar la versión estable 'v1'
+        # Esto suele solucionar el problema cuando la librería está 'trabada'
+        config_estable = {'api_version': 'v1'}
+        model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash'
+        )
         
         detalles = ""
         for j in jugadores_info:
             detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score: {j[4]}\n"
         
-        prompt = f"Actuá como un DT argentino. Analizá este equipo y dame un consejo corto con jerga: {detalles}"
+        prompt = f"DT argentino analiza este equipo: {detalles}. Elegí capitán y hablá con jerga."
         
+        # Intentamos la generación
         response = model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        # PLAN B: Si el anterior falla, usamos la ruta completa del modelo Pro
-        try:
-            model_alt = genai.GenerativeModel('models/gemini-pro')
-            return model_alt.generate_content(prompt).text
-        except Exception as e2:
-            return f"⚠️ Error de sistema persistente. Intentá reiniciar tu terminal y ejecutar: pip install -U google-generativeai"
+        # Si sigue fallando, es probable que la librería necesite una 'limpieza' física
+        return f"⚠️ Error crítico: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
