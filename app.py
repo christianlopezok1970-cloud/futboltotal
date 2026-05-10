@@ -9,37 +9,32 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN IA ---
 import google.generativeai as genai
 
-# Tu clave que termina en zdcU
+# Tu clave (zdcU)
 genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión simplificada al máximo para evitar incompatibilidades."""
+    """Versión para romper el bucle del 404."""
     try:
-        # Usamos el modelo base sin prefijos ni versiones raras
+        # En v1beta, el modelo más estable se llama simplemente 'gemini-pro'
+        # Probamos este primero porque es el que menos falla
         model = genai.GenerativeModel('gemini-pro')
         
         detalles = ""
         for j in jugadores_info:
             detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
         
-        prompt = f"""
-        Actuá como un Ayudante de Campo de la liga argentina.
-        Analizá este plantel de Virtual DT:
-        {detalles}
-        Decime quién debería ser el capitán y dame un consejo corto con jerga de vestuario.
-        """
+        prompt = f"DT argentino analiza este equipo: {detalles}. Elegí capitán y hablá con jerga de vestuario."
         
-        # Llamada bien básica
         response = model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        # Si gemini-pro falla, probamos con el flash a secas
+        # Si 'gemini-pro' no existe, intentamos la versión flash sin números
         try:
-            model_flash = genai.GenerativeModel('gemini-1.5-flash')
+            model_flash = genai.GenerativeModel('gemini-flash')
             return model_flash.generate_content(prompt).text
         except Exception as e2:
-            return f"⚠️ El Profe sigue con problemas: {str(e2)}"
+            return f"⚠️ Error 404 persistente. Por favor, ejecutá 'pip install -U google-generativeai' en tu terminal."
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
