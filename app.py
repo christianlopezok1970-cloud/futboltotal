@@ -11,42 +11,32 @@ from datetime import datetime, timedelta
 genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpIs")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Analiza la plantilla usando el modelo más estable."""
+    """Versión ultra-estable del asistente."""
     
-    # Usamos el nombre técnico completo para evitar el 404
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
+    # Usamos el nombre corto que es el más compatible
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # Preparamos los datos
     detalles = ""
     for j in jugadores_info:
         detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
     
     prompt = f"""
-    Actuá como un Ayudante de Campo experto del fútbol argentino.
-    Analizá este plantel:
+    Actuá como un Ayudante de Campo de la liga argentina, bien apasionado.
+    Analizá este plantel de un manager de Virtual DT:
     {detalles}
     
-    1. Revisá si estos jugadores jugaron el último partido real.
-    2. Decime si alguno está lesionado o suspendido.
-    3. Dame consejos con jerga futbolera y recomendá un capitán.
+    1. Decime qué te parece el equipo (usá jerga como 'equipazo', 'le falta horno', etc).
+    2. Tirame un consejo de a quién poner de capitán hoy.
+    3. Si algún jugador tiene score bajo, decime si lo aguantamos o lo mandamos a la reserva.
+    4. Sé breve y motivador.
     """
     
     try:
-        # Intentamos con búsqueda web (Grounding)
-        # Nota: Si el error 404 persiste, es por la herramienta 'google_search_retrieval'
-        response = model.generate_content(
-            prompt, 
-            tools=[{'google_search_retrieval': {}}]
-        )
+        # LLAMADA SIMPLE: Sin herramientas extras para evitar el error 404
+        response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        # PLAN B: Si la versión de la API o el modelo no soportan búsqueda web, 
-        # respondemos con la inteligencia normal (que nunca falla).
-        try:
-            response = model.generate_content(prompt)
-            return "*(El Profe te tira la posta de memoria, sin internet)* \n\n" + response.text
-        except Exception as e2:
-            return f"⚠️ Error definitivo: {str(e2)}"
+        return f"⚠️ Error de conexión: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
