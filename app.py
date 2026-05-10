@@ -186,25 +186,31 @@ st.divider()
 st.subheader("👨‍🏫 Charla Técnica con el Profe")
 
 if st.button("📋 PEDIR INFORME DE LA FECHA (IA + WEB)", use_container_width=True):
-    # Usamos la misma lista que usás para 'titulares' y 'suplentes'
-    # Asumo que en tu código tenés una variable donde guardás todo antes de dibujar
-    
-    # Creamos una lista unificada para el Profe
+    # Creamos la lista para el Profe
     plantel_completo = []
     
-    # Si tenés las listas de 'titulares' y 'suplentes' cargadas arriba en tu código:
-    for j in titulares:
-        plantel_completo.append([j[1], j[2], "Titular", j[4], j[5]]) # Ajustá los índices según tu tupla
-    for j in suplentes:
-        plantel_completo.append([j[1], j[2], "Suplente", j[4], j[5]])
+    # IMPORTANTE: Aquí ajustamos qué columna es cada cosa.
+    # Si 'titulares' es una lista de lo que trajiste de la DB:
+    # j[0] suele ser el ID, j[1] el Nombre, j[2] la Posición, j[3] el Equipo...
+    
+    try:
+        for j in titulares:
+            # PROBÁ ESTE ORDEN: Nombre, Posición, Estado, Equipo
+            # Si se ve mal, cambiamos los números.
+            plantel_completo.append([j[1], j[2], "Titular", j[3]]) 
+            
+        for j in suplentes:
+            plantel_completo.append([j[1], j[2], "Suplente", j[3]])
 
-    if not plantel_completo:
-        st.warning("No tenés jugadores en cancha ni en el banco.")
-    else:
-        with st.status("El Profe está analizando el equipo...", expanded=True) as status:
-            informe = asistente_tecnico_pro(plantel_completo)
-            status.update(label="¡Informe listo!", state="complete")
-            st.markdown(informe)
+        if not plantel_completo:
+            st.warning("No hay jugadores cargados.")
+        else:
+            with st.status("El Profe está buscando los nombres reales...", expanded=True) as status:
+                informe = asistente_tecnico_pro(plantel_completo)
+                status.update(label="¡Informe listo!", state="complete")
+                st.markdown(informe)
+    except Exception as e:
+        st.error(f"Hubo un lío con los datos: {e}. Revisá el orden de las columnas.")
 
 # --- 6. OJEADOR ---
 st.subheader("🕵️ OJEADOR")
