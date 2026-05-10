@@ -260,3 +260,44 @@ st.subheader("🏆 TABLA DE LIGA")
 ranking = ejecutar_db("SELECT nombre, pj, dg, pts_liga, ganancias_historicas FROM usuarios ORDER BY pts_liga DESC, dg DESC")
 if ranking:
     st.table(pd.DataFrame(ranking, columns=["Manager", "PJ", "DG", "PTS", "Ganancia Total"]))
+
+# --- HERRAMIENTA DE ADMINISTRACIÓN ACTUALIZADA ---
+with st.sidebar.expander("⚠️ Zona de Administración"):
+    pin = st.text_input("PIN de Seguridad", type="password")
+    if pin == "2020": 
+        usuario_a_gestionar = st.text_input("Nombre del manager")
+        
+        col_admin1, col_admin2 = st.columns(2)
+        
+        # BOTÓN 1: RESET A CERO (Lo que pediste)
+        if col_admin1.button("🔄 RESET A CERO"):
+            user_data = ejecutar_db("SELECT id FROM usuarios WHERE nombre = ?", (usuario_a_gestionar,))
+            if user_data:
+                u_id_res = user_data[0][0]
+                # 1. Liberamos (borramos) todos los jugadores de su plantilla
+                ejecutar_db("DELETE FROM plantilla WHERE usuario_id = ?", (u_id_res,), commit=True)
+                # 2. Restauramos monedas y limpiamos estadísticas
+                ejecutar_db("""UPDATE usuarios SET 
+                            monedas = 1000, 
+                            pts_liga = 0, 
+                            pj = 0, 
+                            dg = 0, 
+                            ganancias_historicas = 0, 
+                            ultima_jornada = '' 
+                            WHERE id = ?""", (u_id_res,), commit=True)
+                st.success(f"✅ {usuario_a_gestionar} reseteado a 1000 monedas y plantilla vacía.")
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error("Usuario no encontrado.")
+
+        # BOTÓN 2: BORRADO DEFINITIVO (Elimina la cuenta)
+        if col_admin2.button("🗑️ BORRAR CUENTA"):
+            user_id_data = ejecutar_db("SELECT id FROM usuarios WHERE nombre = ?", (usuario_a_gestionar,))
+            if user_id_data:
+                u_id_borrar = user_id_data[0][0]
+                ejecutar_db("DELETE FROM plantilla WHERE usuario_id = ?", (u_id_borrar,), commit=True)
+                ejecutar_db("DELETE FROM usuarios WHERE id = ?", (u_id_borrar,), commit=True)
+                st.warning(f"❌ Usuario {usuario_a_gestionar} eliminado del sistema.")
+                time.sleep(2)
+                st.rerun()
