@@ -211,7 +211,7 @@ if 'prospecto' in st.session_state:
         
         # 3. Mostramos la info secundaria en un formato destacado pero limpio
         st.markdown(f"**Posición:** {p['p']} | **Nivel:** {estrellas}")
-        st.markdown(f"Equipo: :blue[{p['e']}] | Score Actual: :orange[{p['s']}]")
+        st.markdown(f"Equipo: :green[{p['e']}] | Score Actual: :orange[{p['s']}]")
         
         # 4. El precio en grande para generar impacto
         st.success(f"### 💰 Precio: {p['pr']} 🪙")
