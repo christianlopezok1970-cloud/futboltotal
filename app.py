@@ -8,51 +8,47 @@ from datetime import datetime, timedelta
 
 def asistente_tecnico_pro(jugadores_info):
     try:
-        # 1. Buscamos TODOS los modelos que TU cuenta permite usar para texto
-        modelos_posta = [
-            m.name for m in genai.list_models() 
-            if 'generateContent' in m.supported_generation_methods
-        ]
+        # 1. Obtenemos la lista de modelos que tu cuenta REALMENTE ve
+        modelos_disponibles = [m.name for m in genai.list_models()]
         
-        if not modelos_posta:
-            return "⚠️ No encontré modelos disponibles en tu cuenta de Google AI."
+        # 2. Buscamos el Flash pero le sacamos el "models/" pase lo que pase
+        # La API de Streamlit a veces se lleva mal con el prefijo en v1beta
+        modelo_target = next((m for m in modelos_disponibles if '1.5-flash' in m), None)
+        
+        if modelo_target:
+            nombre_final = modelo_target.replace('models/', '')
+        else:
+            # Si no hay flash, vamos al Pro que es infalible
+            nombre_final = 'gemini-pro'
 
-        # 2. PRIORIDAD: Buscamos el Flash, pero si no está, usamos EL PRIMERO de la lista
-        # El split('/')[-1] es para limpiar el nombre y evitar el error 404
-        modelo_elegido = next((m for m in modelos_posta if '1.5-flash' in m), modelos_posta[0])
-        nombre_limpio = modelo_elegido.split('/')[-1]
+        # 3. CONFIGURACIÓN DEL MODELO
+        # Usamos el nombre limpio (ej: 'gemini-1.5-flash')
+        model = genai.GenerativeModel(model_name=nombre_final)
         
-        # 3. CONFIGURAMOS EL MODELO (Sin tools para asegurar que no tire 404)
-        model = genai.GenerativeModel(model_name=nombre_limpio)
-        
-        # Armamos el reporte de jugadores (Titulares y Suplentes)
+        # Preparamos la data del equipo
         titulares = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Titular'])
         suplentes = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Suplente'])
 
         prompt = f"""
-        Sos un Ayudante de Campo de la Liga Argentina. Hoy es 10/05/2026.
-        Analizá este plantel de forma realista:
+        Sos un DT argentino experto. Hoy es 10/05/2026.
+        Analizá este equipo y dame un informe picante:
+        TITULARES: {titulares}
+        SUPLENTES: {suplentes}
         
-        TITULARES:
-        {titulares}
-        
-        SUPLENTES:
-        {suplentes}
-        
-        TAREA:
-        1. Decime cómo vienen estos jugadores según la actualidad real de sus clubes.
-        2. Si algún suplente está para entrar, avisame.
-        3. Hablá como un DT argentino (tipo Bilardo o Caruso).
-        4. Si no tenés el dato del último partido, hacé un análisis de su momento general.
+        ¿Quién llega bien? ¿Quién está para el banco? Hablá como un DT de verdad.
         """
         
-        # 4. GENERAMOS
+        # 4. INTENTO DE GENERACIÓN
         response = model.generate_content(prompt)
         return response.text
 
     except Exception as e:
-        # Si falla, que nos diga exactamente qué modelo intentó usar
-        return f"⚠️ Error en el predio: {str(e)}"
+        # Si falla el Flash, tiramos el último manotazo de ahogado con el Pro
+        try:
+            model_backup = genai.GenerativeModel(model_name='gemini-pro')
+            return model_backup.generate_content("Hacé un análisis corto de este equipo: " + str(jugadores_info)).text
+        except:
+            return f"⚠️ Error crítico en el predio: {str(e)}. Modelos vistos: {modelos_disponibles}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
