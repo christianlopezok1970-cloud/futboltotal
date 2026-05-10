@@ -14,33 +14,49 @@ genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 # --- CONFIGURACIÓN IA (VERSIÓN DEFINITIVA) ---
 def asistente_tecnico_pro(jugadores_info):
-    """Detecta automáticamente el modelo disponible para evitar el 404."""
+    """Analiza jugador por jugador usando búsqueda web en tiempo real."""
     try:
-        # 1. Buscamos qué modelos tenés habilitados realmente
-        modelos_disponibles = [m.name for m in genai.list_models() 
-                              if 'generateContent' in m.supported_generation_methods]
+        # Usamos el modelo que ya sabemos que te funciona
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
-        if not modelos_disponibles:
-            return "⚠️ No tenés modelos disponibles con esta API Key."
-
-        # 2. Elegimos el mejor disponible (preferimos flash, sino el que haya)
-        # Buscamos alguno que diga '1.5-flash', si no, agarramos el primero de la lista
-        modelo_a_usar = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
+        # Separamos titulares y suplentes para el análisis
+        titulares = [j for j in jugadores_info if j[2] == 'Titular']
+        suplentes = [j for j in jugadores_info if j[2] == 'Suplente']
         
-        # 3. Configuramos el modelo con ese nombre exacto
-        model = genai.GenerativeModel(modelo_a_usar)
+        detalles_titulares = "\n".join([f"- {j[0]} ({j[1]}) - Club: {j[3]}" for j in titulares])
+        detalles_suplentes = "\n".join([f"- {j[0]} ({j[1]}) - Club: {j[3]}" for j in suplentes])
         
-        detalles = ""
-        for j in jugadores_info:
-            detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score: {j[4]}\n"
+        prompt = f"""
+        Actuá como un Ayudante de Campo experto del fútbol argentino. 
+        Hoy es {datetime.now().strftime('%d/%m/%Y')}.
         
-        prompt = f"Actuá como un DT argentino. Analizá este equipo y dame un consejo corto con jerga: {detalles}"
+        ANALIZÁ ESTOS JUGADORES TITULARES UNO POR UNO:
+        {detalles_titulares}
         
-        response = model.generate_content(prompt)
-        return response.text
+        Y ESTOS SUPLENTES:
+        {detalles_suplentes}
         
+        INSTRUCCIONES PARA EL INFORME:
+        1. Para cada TITULAR: Usá la búsqueda web para ver si jugó el último partido de su club, qué puntaje le dieron los diarios o si está lesionado/suspendido para la próxima fecha.
+        2. Para los SUPLENTES: Mirá si alguno la rompió y merece subir al 11 inicial.
+        3. Usá jerga futbolera argentina (metió, fue un tronco, está entre algodones, es un distinto).
+        4. Sé directo: si alguien no juega, avisame para que lo saque ya.
+        """
+        
+        # Intentamos con búsqueda en Google (Grounding)
+        try:
+            response = model.generate_content(
+                prompt,
+                tools=[{'google_search_retrieval': {}}]
+            )
+            return response.text
+        except:
+            # Plan B: Si la búsqueda web falla, que analice con su conocimiento
+            response = model.generate_content(prompt)
+            return "*(Nota: Sin conexión web en vivo, análisis basado en historial)* \n\n" + response.text
+            
     except Exception as e:
-        return f"⚠️ Error en detección: {str(e)}"
+        return f"⚠️ Problema en el vestuario: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
