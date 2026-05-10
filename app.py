@@ -11,22 +11,39 @@ genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpIs")
 
 def asistente_tecnico_pro(jugadores_info):
     """Analiza la plantilla usando búsqueda en Google."""
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Usamos el modelo flash-001 o flash simplemente
+    # Si sigue fallando, probá con 'gemini-1.5-flash-latest'
+    model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+    
     detalles = ""
     for j in jugadores_info:
-        # j[0]=Nombre, j[1]=Posicion, j[3]=Equipo, j[4]=Score
         detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual en la app: {j[4]}\n"
     
     prompt = f"""
-    Actuá como un Ayudante de Campo experto y picante del fútbol argentino.
-    Analizá este plantel para el manager:
-    {detalles}
+    Actuá como un Ayudante de Campo experto del fútbol argentino.
+    Analizá este plantel: {detalles}
+    Investigá si jugaron la última fecha y dame recomendaciones breves.
+    """
+    
+    try:
+        # Intentamos la generación
+        response = model.generate_content(
+            prompt, 
+            tools=[{'google_search_retrieval': {}}]
+        )
+        return response.text
+    except Exception as e:
+        # Si el error persiste, probamos sin la herramienta de búsqueda como "Plan B"
+        try:
+            response = model.generate_content(prompt)
+            return "*(Nota: Info basada en memoria, sin búsqueda web)* \n\n" + response.text
+        except Exception as e2:
+            return f"⚠️ Error definitivo: {str(e2)}"
     
     INSTRUCCIONES:
     1. Usá tu herramienta de búsqueda para ver si estos jugadores fueron titulares o figuras en la última fecha real.
     2. Si alguno está lesionado, suspendido o se fue del club, avisale al manager.
-    3. Compará el Score de la app con la realidad. Si el score es 0 pero el tipo jugó, decile al manager que actualice.
-    4. Sé breve, usá jerga de vestuario y dale una recomendación final de a quién vender y a quién poner de capitán.
+    3. Sé breve, usá jerga de vestuario y dale una recomendación final de a quién vender y a quién poner de capitán.
     """
     try:
         # Intentamos con búsqueda web
