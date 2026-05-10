@@ -12,18 +12,43 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def asistente_tecnico_pro(jugadores_info):
     try:
-        # --- ELIGE EL MODELO AUTOMÁTICAMENTE ---
+        # 1. Listamos y elegimos el modelo (tu lógica impecable)
         modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        # Priorizamos el flash si está, sino el primero que encuentre
         modelo_ok = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
         
-        # Configuramos el que el sistema eligió
-        model = genai.GenerativeModel(model_name=modelo_ok)
+        # 2. CONFIGURACIÓN CON BÚSQUEDA (El "secreto" para el dato real)
+        # Usamos tools solo si el modelo elegido es un 'flash', que son los que mejor lo bancan
+        herramientas = [{'google_search_retrieval': {}}] if 'flash' in modelo_ok else None
         
-        # ... (el resto de tu lógica de titulares/suplentes) ...
+        model = genai.GenerativeModel(
+            model_name=modelo_ok,
+            tools=herramientas
+        )
+        
+        # 3. Armamos el reporte de titulares y suplentes
+        titulares = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Titular'])
+        suplentes = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Suplente'])
+
+        prompt = f"""
+        Sos un DT de la Primera División Argentina. Hoy es {datetime.now().strftime('%d/%m/%Y')}.
+        USÁ GOOGLE PARA BUSCAR DATA REAL. Analizá este plantel:
+        
+        TITULARES:
+        {titulares}
+        
+        SUPLENTES:
+        {suplentes}
+        
+        INSTRUCCIONES:
+        1. Buscá quién jugó, quién hizo goles y quién está lesionado este último finde.
+        2. Si un suplente merece ser titular, decímelo.
+        3. Hablá como un DT argentino (picante, directo, con jerga).
+        4. No digas "no tengo el dato", si no encontrás algo específico, opiná según la actualidad del club.
+        """
         
         response = model.generate_content(prompt)
         return response.text
+
     except Exception as e:
         return f"⚠️ El Profe se quedó sin señal: {str(e)}"
 
