@@ -4,21 +4,14 @@ import sqlite3
 import random
 import time
 import google.generativeai as genai
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN IA ---
-# Esta línea le da el "permiso" a tu app para usar Gemini
 genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpls")
 
-# --- FUNCIÓN DEL AYUDANTE ---
 def asistente_tecnico_pro(jugadores_info):
-    """
-    Analiza la plantilla usando búsqueda en Google.
-    jugadores_info: lista de tuplas de la DB (Nombre, Posicion, Nivel, Equipo, Score)
-    """
+    """Analiza la plantilla usando búsqueda en Google."""
     model = genai.GenerativeModel('gemini-1.5-flash')
-    
-    # Preparamos los datos de la plantilla para la IA
     detalles = ""
     for j in jugadores_info:
         # j[0]=Nombre, j[1]=Posicion, j[3]=Equipo, j[4]=Score
@@ -35,13 +28,10 @@ def asistente_tecnico_pro(jugadores_info):
     3. Compará el Score de la app con la realidad. Si el score es 0 pero el tipo jugó, decile al manager que actualice.
     4. Sé breve, usá jerga de vestuario y dale una recomendación final de a quién vender y a quién poner de capitán.
     """
-    
     try:
-        # Activamos la búsqueda en Google para que la IA no invente
-        respuesta = model.generate_content(prompt, tools=[{'google_search_retrieval': {}}])
-        return respuesta.text
+        response = model.generate_content(prompt, tools=[{'google_search_retrieval': {}}])
+        return response.text
     except Exception as e:
-        # Si hay un error, mostramos un mensaje amigable
         return "⚠️ Che, el asistente se quedó sin señal en el vestuario. Probá en un toque."
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
@@ -55,7 +45,7 @@ def ejecutar_db(query, params=(), commit=False):
         if commit: conn.commit()
         return c.fetchall()
 
-# --- INICIALIZACIÓN Y MIGRACIONES ---
+# --- INICIALIZACIÓN ---
 ejecutar_db('''CREATE TABLE IF NOT EXISTS usuarios 
              (id INTEGER PRIMARY KEY, nombre TEXT UNIQUE, password TEXT, monedas REAL, 
              prestigio INTEGER DEFAULT 0, ultima_jornada TEXT DEFAULT '', 
@@ -67,22 +57,13 @@ ejecutar_db('''CREATE TABLE IF NOT EXISTS plantilla
              posicion TEXT, nivel INTEGER, equipo TEXT, score REAL, es_titular INTEGER,
              ultima_oferta_fecha TEXT DEFAULT '', ultima_oferta_valor INTEGER DEFAULT 0)''', commit=True)
 
-# Asegurar columnas de mercado si no existen
-try:
-    ejecutar_db("ALTER TABLE plantilla ADD COLUMN ultima_oferta_fecha TEXT DEFAULT ''", commit=True)
-    ejecutar_db("ALTER TABLE plantilla ADD COLUMN ultima_oferta_valor INTEGER DEFAULT 0", commit=True)
-except: pass
-
 # --- 2. FUNCIONES DE APOYO ---
 def es_oferta_valida(fecha_str):
-    """Verifica si ya se pidió una oferta desde el último reset de las 8:00 AM"""
     if not fecha_str: return False
     ahora = datetime.now()
-    # Calcular el último reset (hoy a las 8am o ayer a las 8am)
     ultimo_reset = ahora.replace(hour=8, minute=0, second=0, microsecond=0)
     if ahora < ultimo_reset:
         ultimo_reset -= timedelta(days=1)
-    
     fecha_oferta = datetime.strptime(fecha_str, '%Y-%m-%d %H:%M:%S')
     return fecha_oferta > ultimo_reset
 
@@ -130,214 +111,106 @@ jugadores_db = ejecutar_db("""SELECT jugador_nombre, posicion, nivel, equipo, sc
 
 titulares = [j for j in jugadores_db if j[5] == 1]
 suplentes = [j for j in jugadores_db if j[5] == 0]
-total_jugadores = len(jugadores_db)
 
 st.markdown("### ⚽ VIRTUAL DT PRO")
 
-# MÉTRICAS PRINCIPALES
 c1, c2 = st.columns(2)
 c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
-
-# --- SISTEMA DE COBRO Y PUNTAJE ---
-# --- REEMPLAZA LA SECCIÓN DEL BOTÓN DE COBRO POR ESTA ---
 
 if len(titulares) == 11:
     jornada_actual = str(df_base['Jornada'].iloc[0]) if 'Jornada' in df_base.columns else "S/J"
     ganancia = sum([int(max(0, j[4] - 60)) for j in titulares])
-    
     c2.markdown(f"📅 **{jornada_actual}** | 📈 **Puntos:** {ganancia}")
-    
     ultima_cobrada = ejecutar_db("SELECT ultima_jornada FROM usuarios WHERE id = ?", (u_id,))[0][0]
 
     if ultima_cobrada == jornada_actual:
-        c2.success(f"✅ Jornada ya acreditada.")
+        c2.success(f"✅ Jornada acreditada.")
     else:
-        # --- CAPA DE SEGURIDAD VISUAL ---
-        st.sidebar.divider() # Un separador para que se vea limpio
-        confirmar = c2.checkbox("Confirmar validez de la formación", key="check_seguridad")
-        
-        # El botón solo se habilita si 'confirmar' es True
-        if c2.button("💰 COBRAR JORNADA", 
-                     use_container_width=True, 
-                     type="primary", 
-                     disabled=not confirmar): # <--- Aquí está la clave
-            
-            # Ejecutamos el cobro
-            gf, gc, p_pts = 0, 0, 0
-            if ganancia < 40: gf, gc, p_pts = 0, 3, 0
-            elif 40 <= ganancia <= 59: gf, gc, p_pts = 0, 1, 0
-            elif 60 <= ganancia <= 99: gf, gc, p_pts = 1, 1, 1
-            elif ganancia >= 100: gf, gc, p_pts = 2, 0, 3
-            
-            ejecutar_db("""UPDATE usuarios SET 
-                        monedas = monedas + ?, 
-                        ganancias_historicas = ganancias_historicas + ?,
-                        pts_liga = pts_liga + ?, 
-                        pj = pj + 1, 
-                        dg = dg + ?, 
-                        ultima_jornada = ? 
-                        WHERE id = ?""", 
-                        (ganancia, ganancia, p_pts, (gf-gc), jornada_actual, u_id), commit=True)
-            
+        confirmar = c2.checkbox("Confirmar formación", key="check_seguridad")
+        if c2.button("💰 COBRAR", disabled=not confirmar):
+            p_pts = 3 if ganancia >= 100 else (1 if ganancia >= 60 else 0)
+            ejecutar_db("UPDATE usuarios SET monedas=monedas+?, pts_liga=pts_liga+?, pj=pj+1, ultima_jornada=? WHERE id=?", (ganancia, p_pts, jornada_actual, u_id), commit=True)
             st.balloons()
-            st.success(f"¡Cobrado! Resultado: {gf}-{gc}")
-            time.sleep(2)
             st.rerun()
 else:
     c2.warning(f"⚠️ Faltan {11 - len(titulares)} titulares")
 
-# --- 5. RENDERIZADO DE PLANTILLA ---
+# --- 5. RENDERIZADO ---
 def dibujar_plantilla(lista, modo="titular"):
     posiciones = ["ARQ", "DEF", "VOL", "DEL"]
-    mapping = {"ARQ": "Arquero", "DEF": "Defensores", "VOL": "Volantes", "DEL": "Delanteros"}
     cols = st.columns(4)
-    
     for i, pk in enumerate(posiciones):
         with cols[i]:
-            st.markdown(f"**{mapping[pk]}**")
+            st.markdown(f"**{pk}**")
             for j in [x for x in lista if x[1] == pk]:
                 nom, pos, niv, eq, sco, tit, id_reg, f_ofert, v_ofert = j
                 with st.expander(f"{nom}"):
                     st.caption(f"{eq} | {'★' * int(niv)}")
-                    st.write(f"Score: **{sco}**")
-                    
                     if modo == "titular":
-                        if st.button("⬇️ Bajar", key=f"down_{id_reg}"):
-                            ejecutar_db("UPDATE plantilla SET es_titular = 0 WHERE id = ?", (id_reg,), commit=True)
-                            st.rerun()
+                        if st.button("⬇️", key=f"down_{id_reg}"):
+                            ejecutar_db("UPDATE plantilla SET es_titular=0 WHERE id=?", (id_reg,), commit=True); st.rerun()
                     else:
-                        # LÓGICA DE VENTA CORREGIDA (Única oferta hasta las 8 AM)
-                        ya_busco_hoy = es_oferta_valida(f_ofert)
-                        
-                        if not ya_busco_hoy:
-                            if st.button("🔍 Buscar Oferta", key=f"bus_{id_reg}", use_container_width=True):
-                                with st.status("Buscando...", expanded=False):
-                                    tiempo_azar = random.randint(5, 12)
-                                    time.sleep(tiempo_azar)
-                                    oferta = int((int(niv) * 15) * random.uniform(0.70, 1.30))
-                                    ejecutar_db("UPDATE plantilla SET ultima_oferta_valor = ?, ultima_oferta_fecha = ? WHERE id = ?", 
-                                               (oferta, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), id_reg), commit=True)
-                                st.rerun()
+                        ya = es_oferta_valida(f_ofert)
+                        if not ya:
+                            if st.button("🔍", key=f"bus_{id_reg}"):
+                                of = int((int(niv)*15)*random.uniform(0.7, 1.3))
+                                ejecutar_db("UPDATE plantilla SET ultima_oferta_valor=?, ultima_oferta_fecha=? WHERE id=?", (of, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), id_reg), commit=True); st.rerun()
                         elif v_ofert > 0:
-                            st.info(f"Oferta: {v_ofert} 🪙")
-                            c_a, c_r = st.columns(2)
-                            if c_a.button("✅", key=f"ok_{id_reg}"):
-                                ejecutar_db("DELETE FROM plantilla WHERE id = ?", (id_reg,), commit=True)
-                                ejecutar_db("UPDATE usuarios SET monedas = monedas + ? WHERE id = ?", (v_ofert, u_id), commit=True)
-                                st.rerun()
-                            if c_r.button("❌", key=f"no_{id_reg}"):
-                                ejecutar_db("UPDATE plantilla SET ultima_oferta_valor = 0 WHERE id = ?", (id_reg,), commit=True)
-                                st.rerun()
-                        else:
-                            st.error("⌛ Oferta agotada hasta las 8:00 AM")
-
-                        if st.button("⬆️ Subir", key=f"up_{id_reg}"):
-                            actual = len([p for p in titulares if p[1] == pk])
-                            lim = {'ARQ': 1, 'DEF': 4, 'VOL': 4, 'DEL': 2}
-                            if len(titulares) < 11 and actual < lim.get(pk, 0):
-                                ejecutar_db("UPDATE plantilla SET es_titular = 1 WHERE id = ?", (id_reg,), commit=True)
-                                st.rerun()
+                            st.write(f"{v_ofert}🪙")
+                            if st.button("✅", key=f"ok_{id_reg}"):
+                                ejecutar_db("DELETE FROM plantilla WHERE id=?", (id_reg,), commit=True)
+                                ejecutar_db("UPDATE usuarios SET monedas=monedas+? WHERE id=?", (v_ofert, u_id), commit=True); st.rerun()
+                        if st.button("⬆️", key=f"up_{id_reg}"):
+                            ejecutar_db("UPDATE plantilla SET es_titular=1 WHERE id=?", (id_reg,), commit=True); st.rerun()
 
 st.divider()
 st.subheader("TITULARES")
 dibujar_plantilla(titulares, "titular")
 
-# --- 6. OJEADOR (FICHAJES) ---
+# --- NUEVA SECCIÓN: ASISTENTE TÉCNICO ---
 st.divider()
-st.subheader("🕵️ OJEADOR")
-co1, co2 = st.columns([1, 2])
-with co1:
-    if st.button("BUSCAR JUGADOR (Costo: 5 🪙)", use_container_width=True):
-        if monedas >= 5:
-            ejecutar_db("UPDATE usuarios SET monedas = monedas - 5 WHERE id = ?", (u_id,), commit=True)
-            with st.status("Buscando..."):
-                tiempo_espera = random.randint(5, 12) 
-                time.sleep(tiempo_espera)
-                cand = df_base.sample(n=1).iloc[0]
-                precio = int((int(cand['Nivel']) * 15) * random.uniform(0.70, 1.30))
-                st.session_state.prospecto = {"n": cand['Jugador'], "p": cand['POS'], "l": int(cand['Nivel']), "e": cand['Equipo'], "s": float(cand['Score']), "pr": precio}
-            st.rerun()
-        else: st.error("Sin monedas.")
-
-# --- BUSCAR ESTA PARTE EN TU SECCIÓN DE OJEADOR ---
-if 'prospecto' in st.session_state:
-    p = st.session_state.prospecto
-    with co2:
-        # 1. Creamos las estrellas visuales según el nivel
-        estrellas = '★' * p['l'] 
-        
-        # 2. Usamos un encabezado de nivel 3 para que el nombre sea grande
-        st.markdown(f"### 🏃 {p['n']}") 
-        
-        # 3. Mostramos la info secundaria en un formato destacado pero limpio
-        st.markdown(f"**Posición:** {p['p']} | **Nivel:** {estrellas}")
-        st.markdown(f"Equipo: :green[{p['e']}] | Score Actual: :orange[{p['s']}]")
-        
-        # 4. El precio en grande para generar impacto
-        st.success(f"### 💰 Precio: {p['pr']} 🪙")
-        
-        ca1, ca2 = st.columns(2)
-        if ca1.button("🤝 FICHAR JUGADOR", type="primary", use_container_width=True):
-            if monedas >= p['pr']:
-                ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
-                            (u_id, p['n'], p['p'], p['l'], p['e'], p['s']), commit=True)
-                ejecutar_db("UPDATE usuarios SET monedas = monedas - ? WHERE id = ?", (p['pr'], u_id), commit=True)
-                del st.session_state.prospecto
-                st.rerun()
-            else: 
-                st.error("No tienes monedas suficientes.")
-        
-        if ca2.button("🚫 DESCARTAR", use_container_width=True):
-            del st.session_state.prospecto
-            st.rerun()
+st.subheader("👨‍🏫 Charla Técnica con el Profe")
+if st.button("📋 PEDIR INFORME DE LA FECHA (IA + WEB)", use_container_width=True):
+    if not jugadores_db:
+        st.warning("No tenés jugadores.")
+    else:
+        with st.status("El Profe está analizando Promiedos y Olé...", expanded=True) as status:
+            informe = asistente_tecnico_pro(jugadores_db)
+            status.update(label="¡Informe listo!", state="complete")
+            st.markdown(informe)
+st.divider()
 
 st.subheader("SUPLENTES")
 dibujar_plantilla(suplentes, "suplente")
 
-# --- 7. RANKING ---
-st.divider()
-st.subheader("🏆 TABLA DE LIGA")
-ranking = ejecutar_db("SELECT nombre, pj, dg, pts_liga, ganancias_historicas FROM usuarios ORDER BY pts_liga DESC, dg DESC")
-if ranking:
-    st.table(pd.DataFrame(ranking, columns=["Manager", "PJ", "DG", "PTS", "Ganancia Total"]))
+# --- 6. OJEADOR ---
+st.subheader("🕵️ OJEADOR")
+if st.button("BUSCAR JUGADOR (5 🪙)"):
+    if monedas >= 5:
+        ejecutar_db("UPDATE usuarios SET monedas=monedas-5 WHERE id=?", (u_id,), commit=True)
+        cand = df_base.sample(n=1).iloc[0]
+        precio = int((int(cand['Nivel'])*15)*random.uniform(0.7, 1.3))
+        st.session_state.prospecto = {"n": cand['Jugador'], "p": cand['POS'], "l": int(cand['Nivel']), "e": cand['Equipo'], "s": float(cand['Score']), "pr": precio}
+        st.rerun()
 
-# --- HERRAMIENTA DE ADMINISTRACIÓN ACTUALIZADA ---
-with st.sidebar.expander("⚠️ Zona de Administración"):
-    pin = st.text_input("PIN de Seguridad", type="password")
-    if pin == "2020": 
-        usuario_a_gestionar = st.text_input("Nombre del manager")
-        
-        col_admin1, col_admin2 = st.columns(2)
-        
-        # BOTÓN 1: RESET A CERO (Lo que pediste)
-        if col_admin1.button("🔄 RESET A CERO"):
-            user_data = ejecutar_db("SELECT id FROM usuarios WHERE nombre = ?", (usuario_a_gestionar,))
-            if user_data:
-                u_id_res = user_data[0][0]
-                # 1. Liberamos (borramos) todos los jugadores de su plantilla
-                ejecutar_db("DELETE FROM plantilla WHERE usuario_id = ?", (u_id_res,), commit=True)
-                # 2. Restauramos monedas y limpiamos estadísticas
-                ejecutar_db("""UPDATE usuarios SET 
-                            monedas = 1000, 
-                            pts_liga = 0, 
-                            pj = 0, 
-                            dg = 0, 
-                            ganancias_historicas = 0, 
-                            ultima_jornada = '' 
-                            WHERE id = ?""", (u_id_res,), commit=True)
-                st.success(f"✅ {usuario_a_gestionar} reseteado a 1000 monedas y plantilla vacía.")
-                time.sleep(2)
-                st.rerun()
-            else:
-                st.error("Usuario no encontrado.")
+if 'prospecto' in st.session_state:
+    p = st.session_state.prospecto
+    st.info(f"### {p['n']} ({p['p']}) - {p['pr']} 🪙")
+    if st.button("🤝 FICHAR"):
+        ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", (u_id, p['n'], p['p'], p['l'], p['e'], p['s']), commit=True)
+        ejecutar_db("UPDATE usuarios SET monedas=monedas-? WHERE id=?", (p['pr'], u_id), commit=True)
+        del st.session_state.prospecto; st.rerun()
 
-        # BOTÓN 2: BORRADO DEFINITIVO (Elimina la cuenta)
-        if col_admin2.button("🗑️ BORRAR CUENTA"):
-            user_id_data = ejecutar_db("SELECT id FROM usuarios WHERE nombre = ?", (usuario_a_gestionar,))
-            if user_id_data:
-                u_id_borrar = user_id_data[0][0]
-                ejecutar_db("DELETE FROM plantilla WHERE usuario_id = ?", (u_id_borrar,), commit=True)
-                ejecutar_db("DELETE FROM usuarios WHERE id = ?", (u_id_borrar,), commit=True)
-                st.warning(f"❌ Usuario {usuario_a_gestionar} eliminado del sistema.")
-                time.sleep(2)
-                st.rerun()
+# --- 7. RANKING Y ADMIN ---
+st.subheader("🏆 TABLA")
+rk = ejecutar_db("SELECT nombre, pj, dg, pts_liga FROM usuarios ORDER BY pts_liga DESC")
+if rk: st.table(pd.DataFrame(rk, columns=["Manager", "PJ", "DG", "PTS"]))
+
+with st.sidebar.expander("⚠️ Admin"):
+    if st.text_input("PIN", type="password") == "2020":
+        user_adm = st.text_input("Manager a resetear")
+        if st.button("🔄 RESET"):
+            uid = ejecutar_db("SELECT id FROM usuarios WHERE nombre=?", (user_adm,))[0][0]
+            ejecutar_db("DELETE FROM plantilla WHERE usuario_id=?", (uid,), commit=True)
+            ejecutar_db("UPDATE usuarios SET monedas=1000, pj=0, pts_liga=0 WHERE id=?", (uid,), commit=True)
+            st.success("Reseteado"); st.rerun()
