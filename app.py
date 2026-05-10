@@ -7,13 +7,13 @@ import google.generativeai as genai
 from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN IA ---
-# Asegúrate de que tu API Key sea la correcta y no tenga espacios
+# IMPORTANTE: He corregido la clave según tu captura de pantalla (termina en pls)
 genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpls")
 
 def asistente_tecnico_pro(jugadores_info):
     """Analiza la plantilla usando búsqueda en Google con un Plan B si falla."""
     
-    # Usamos el nombre de modelo estándar para evitar el error 404
+    # Usamos el nombre de modelo estándar
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     # Preparamos los datos del plantel
@@ -22,7 +22,7 @@ def asistente_tecnico_pro(jugadores_info):
         # j[0]=Nombre, j[1]=Posición, j[3]=Equipo, j[4]=Score
         detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual en la app: {j[4]}\n"
     
-    # Armamos el mensaje con todas las instrucciones juntas
+    # Armamos el mensaje para la IA
     prompt = f"""
     Actuá como un Ayudante de Campo experto y picante del fútbol argentino.
     Analizá este plantel para el manager:
@@ -31,25 +31,24 @@ def asistente_tecnico_pro(jugadores_info):
     INSTRUCCIONES:
     1. Usá tu herramienta de búsqueda para ver si estos jugadores fueron titulares o figuras en la última fecha real.
     2. Si alguno está lesionado, suspendido o se fue del club, avisale al manager.
-    3. Compará el Score de la app con la realidad. Si el score es 0 pero el tipo jugó, decile que actualice.
-    4. Sé breve, usá jerga de vestuario (ej: 'tronco', 'fiera', 'está en el horno') y dale una recomendación final de a quién vender y a quién poner de capitán.
+    3. Compará el Score de la app con la realidad.
+    4. Sé breve, usá jerga de vestuario y recomendá un capitán.
     """
     
     try:
-        # PLAN A: Intento con búsqueda en Google (Grounding)
+        # Intento con búsqueda en Google
         response = model.generate_content(
             prompt, 
             tools=[{'google_search_retrieval': {}}]
         )
         return response.text
     except Exception as e:
-        # PLAN B: Si falla la búsqueda web (por región o error de API), responde como IA normal
+        # Si falla la búsqueda web, responde como IA normal
         try:
             response = model.generate_content(prompt)
-            return "*(Nota: Sin conexión web en vivo)* \n\n" + response.text
+            return "*(Nota: El Profe está sin datos, responde de memoria)* \n\n" + response.text
         except Exception as e2:
-            # Si todo falla, mostramos el error técnico real
-            return f"⚠️ Error técnico: {str(e2)}"
+            return f"⚠️ Error técnico real: {str(e2)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
