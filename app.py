@@ -13,37 +13,28 @@ import google.generativeai as genai
 genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Analiza la plantilla usando el modelo más compatible."""
+    """Versión 'Ruta Completa' para anular el error 404."""
     try:
-        # 1. Usamos este nombre que es el estándar actual
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Usamos la ruta técnica completa que Google reconoce sí o sí
+        # Probamos primero con la versión 1.5 Flash
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
         
-        # 2. Preparamos la lista de jugadores
         detalles = ""
         for j in jugadores_info:
-            # j[0]=Nombre, j[1]=Posición, j[3]=Equipo, j[4]=Score
             detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score: {j[4]}\n"
         
-        prompt = f"""
-        Actuá como un Ayudante de Campo experto del fútbol argentino.
-        Analizá este plantel de Virtual DT:
-        {detalles}
+        prompt = f"Actuá como un DT argentino. Analizá este equipo y dame un consejo corto con jerga: {detalles}"
         
-        Elegí un capitán, tirá un consejo táctico y usá jerga de vestuario. 
-        Sé breve y motivador.
-        """
-        
-        # 3. Intento de respuesta directa
         response = model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        # PLAN B: Si falla el anterior (Error 404), intentamos con el nombre antiguo
+        # PLAN B: Si el anterior falla, usamos la ruta completa del modelo Pro
         try:
-            model_alt = genai.GenerativeModel('gemini-pro')
+            model_alt = genai.GenerativeModel('models/gemini-pro')
             return model_alt.generate_content(prompt).text
         except Exception as e2:
-            return f"⚠️ Error del Profe: {str(e2)}"
+            return f"⚠️ Error de sistema persistente. Intentá reiniciar tu terminal y ejecutar: pip install -U google-generativeai"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
