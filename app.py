@@ -174,7 +174,8 @@ def dibujar_plantilla(lista, modo="titular"):
                         if not ya_busco_hoy:
                             if st.button("🔍 Buscar Oferta", key=f"bus_{id_reg}", use_container_width=True):
                                 with st.status("Buscando...", expanded=False):
-                                    time.sleep(10)
+                                    tiempo_azar = random.randint(5, 12)
+                                    time.sleep(tiempo_azar)
                                     oferta = int((int(niv) * 15) * random.uniform(0.70, 1.30))
                                     ejecutar_db("UPDATE plantilla SET ultima_oferta_valor = ?, ultima_oferta_fecha = ? WHERE id = ?", 
                                                (oferta, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), id_reg), commit=True)
