@@ -1,10 +1,48 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import json
-import time
 import random
-from datetime import datetime, timedelta
+import time
+import google.generativeai as genai
+from datetime import datetime
+
+# --- CONFIGURACIÓN IA ---
+# Esta línea le da el "permiso" a tu app para usar Gemini
+genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpls")
+
+# --- FUNCIÓN DEL AYUDANTE ---
+def asistente_tecnico_pro(jugadores_info):
+    """
+    Analiza la plantilla usando búsqueda en Google.
+    jugadores_info: lista de tuplas de la DB (Nombre, Posicion, Nivel, Equipo, Score)
+    """
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # Preparamos los datos de la plantilla para la IA
+    detalles = ""
+    for j in jugadores_info:
+        # j[0]=Nombre, j[1]=Posicion, j[3]=Equipo, j[4]=Score
+        detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual en la app: {j[4]}\n"
+    
+    prompt = f"""
+    Actuá como un Ayudante de Campo experto y picante del fútbol argentino.
+    Analizá este plantel para el manager:
+    {detalles}
+    
+    INSTRUCCIONES:
+    1. Usá tu herramienta de búsqueda para ver si estos jugadores fueron titulares o figuras en la última fecha real.
+    2. Si alguno está lesionado, suspendido o se fue del club, avisale al manager.
+    3. Compará el Score de la app con la realidad. Si el score es 0 pero el tipo jugó, decile al manager que actualice.
+    4. Sé breve, usá jerga de vestuario y dale una recomendación final de a quién vender y a quién poner de capitán.
+    """
+    
+    try:
+        # Activamos la búsqueda en Google para que la IA no invente
+        respuesta = model.generate_content(prompt, tools=[{'google_search_retrieval': {}}])
+        return respuesta.text
+    except Exception as e:
+        # Si hay un error, mostramos un mensaje amigable
+        return "⚠️ Che, el asistente se quedó sin señal en el vestuario. Probá en un toque."
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
