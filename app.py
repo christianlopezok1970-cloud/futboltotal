@@ -11,39 +11,21 @@ from datetime import datetime, timedelta
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión Pro: Con acceso a Google Search para data real."""
     try:
-        # 1. Configuramos el modelo con herramientas de búsqueda
-        model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
-            tools=[{'google_search_retrieval': {}}] # <--- ESTO ES LO QUE TE DA EL DATO REAL
-        )
+        # --- ELIGE EL MODELO AUTOMÁTICAMENTE ---
+        modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # Priorizamos el flash si está, sino el primero que encuentre
+        modelo_ok = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
         
-        titulares = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Titular'])
-        suplentes = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Suplente'])
-
-        # 2. El prompt ahora le EXIGE buscar
-        prompt = f"""
-        Sos un Ayudante de Campo de la Liga Argentina. Hoy es 10/05/2026.
-        USÁ GOOGLE SEARCH para verificar estos jugadores. 
+        # Configuramos el que el sistema eligió
+        model = genai.GenerativeModel(model_name=modelo_ok)
         
-        TITULARES:
-        {titulares}
-        
-        SUPLENTES:
-        {suplentes}
-        
-        TAREA:
-        1. Buscá si jugaron el último fin de semana (8-10 de mayo 2026) en Olé o Promiedos.
-        2. Informá rendimiento, goles o lesiones.
-        3. Si algún suplente merece el puesto, avisame.
-        4. Sé picante y futbolero, pero basado en DATA REAL que encuentres en internet.
-        """
+        # ... (el resto de tu lógica de titulares/suplentes) ...
         
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"⚠️ Error: {str(e)}"
+        return f"⚠️ El Profe se quedó sin señal: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
