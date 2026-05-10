@@ -199,26 +199,35 @@ with co1:
             st.rerun()
         else: st.error("Sin monedas.")
 
-# --- BUSCAR ESTA PARTE EN TU CÓDIGO ---
+# --- BUSCAR ESTA PARTE EN TU SECCIÓN DE OJEADOR ---
 if 'prospecto' in st.session_state:
     p = st.session_state.prospecto
     with co2:
-        # Modificamos esta línea para incluir las estrellas visuales
-        estrellas_visuales = '★' * p['l'] 
-        st.info(f"**{p['n']}** ({p['p']}) {estrellas_visuales}") # <--- Cambio aquí
-        st.write(f"Equipo: {p['e']} | Score: {p['s']}")
-        st.markdown(f"## Precio: {p['pr']} 🪙")
+        # 1. Creamos las estrellas visuales según el nivel
+        estrellas = '★' * p['l'] 
+        
+        # 2. Usamos un encabezado de nivel 3 para que el nombre sea grande
+        st.markdown(f"### 🏃 {p['n']}") 
+        
+        # 3. Mostramos la info secundaria en un formato destacado pero limpio
+        st.markdown(f"**Posición:** {p['p']} | **Nivel:** {estrellas}")
+        st.caption(f"Equipo: {p['e']} | Score Actual: {p['s']}")
+        
+        # 4. El precio en grande para generar impacto
+        st.success(f"### 💰 Precio: {p['pr']} 🪙")
         
         ca1, ca2 = st.columns(2)
-        if ca1.button("🤝 FICHAR", type="primary", use_container_width=True):
+        if ca1.button("🤝 FICHAR JUGADOR", type="primary", use_container_width=True):
             if monedas >= p['pr']:
                 ejecutar_db("INSERT INTO plantilla (usuario_id, jugador_nombre, posicion, nivel, equipo, score, es_titular) VALUES (?,?,?,?,?,?,0)", 
                             (u_id, p['n'], p['p'], p['l'], p['e'], p['s']), commit=True)
                 ejecutar_db("UPDATE usuarios SET monedas = monedas - ? WHERE id = ?", (p['pr'], u_id), commit=True)
                 del st.session_state.prospecto
                 st.rerun()
-            else: st.error("No te alcanza.")
-        if ca2.button("🚫 PASAR", use_container_width=True):
+            else: 
+                st.error("No tienes monedas suficientes.")
+        
+        if ca2.button("🚫 DESCARTAR", use_container_width=True):
             del st.session_state.prospecto
             st.rerun()
 
