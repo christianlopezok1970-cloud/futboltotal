@@ -13,28 +13,37 @@ import google.generativeai as genai
 genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión para romper el bucle del 404."""
+    """Analiza la plantilla usando el modelo más compatible."""
     try:
-        # En v1beta, el modelo más estable se llama simplemente 'gemini-pro'
-        # Probamos este primero porque es el que menos falla
-        model = genai.GenerativeModel('gemini-pro')
+        # 1. Usamos este nombre que es el estándar actual
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
+        # 2. Preparamos la lista de jugadores
         detalles = ""
         for j in jugadores_info:
-            detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
+            # j[0]=Nombre, j[1]=Posición, j[3]=Equipo, j[4]=Score
+            detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score: {j[4]}\n"
         
-        prompt = f"DT argentino analiza este equipo: {detalles}. Elegí capitán y hablá con jerga de vestuario."
+        prompt = f"""
+        Actuá como un Ayudante de Campo experto del fútbol argentino.
+        Analizá este plantel de Virtual DT:
+        {detalles}
         
+        Elegí un capitán, tirá un consejo táctico y usá jerga de vestuario. 
+        Sé breve y motivador.
+        """
+        
+        # 3. Intento de respuesta directa
         response = model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        # Si 'gemini-pro' no existe, intentamos la versión flash sin números
+        # PLAN B: Si falla el anterior (Error 404), intentamos con el nombre antiguo
         try:
-            model_flash = genai.GenerativeModel('gemini-flash')
-            return model_flash.generate_content(prompt).text
+            model_alt = genai.GenerativeModel('gemini-pro')
+            return model_alt.generate_content(prompt).text
         except Exception as e2:
-            return f"⚠️ Error 404 persistente. Por favor, ejecutá 'pip install -U google-generativeai' en tu terminal."
+            return f"⚠️ Error del Profe: {str(e2)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
