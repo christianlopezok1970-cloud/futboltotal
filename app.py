@@ -10,9 +10,7 @@ from datetime import datetime, timedelta
 import google.generativeai as genai
 
 # Reemplazá esto con tu clave NUEVA
-NUEVA_CLAVE = "AIzaSyC8pTfEvczxlKhsQb_BCjrr8p1M" 
-
-genai.configure(api_key=NUEVA_CLAVE)
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def asistente_tecnico_pro(jugadores_info):
     """Versión final: Sin inventos y con el modelo correcto."""
