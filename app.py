@@ -29,10 +29,12 @@ def asistente_tecnico_pro(jugadores_info):
     4. Sé breve, usá jerga de vestuario y dale una recomendación final de a quién vender y a quién poner de capitán.
     """
     try:
+        # Intentamos con búsqueda web
         response = model.generate_content(prompt, tools=[{'google_search_retrieval': {}}])
         return response.text
     except Exception as e:
-        return "⚠️ Che, el asistente se quedó sin señal en el vestuario. Probá en un toque."
+        # ESTO ES LO QUE CAMBIA: Ahora nos va a decir el error real
+        return f"⚠️ Error técnico: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
