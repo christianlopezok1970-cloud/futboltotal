@@ -10,10 +10,14 @@ from datetime import datetime, timedelta
 # IMPORTANTE: He corregido la clave según tu captura de pantalla (termina en pls)
 genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpIs")
 
+# --- CONFIGURACIÓN IA ---
+# Asegurate de que la clave sea la que termina en "pls"
+genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpls")
+
 def asistente_tecnico_pro(jugadores_info):
-    """Versión ultra-estable del asistente."""
+    """Versión blindada: Sin herramientas raras para evitar el error 404."""
     
-    # Usamos el nombre corto que es el más compatible
+    # Probamos con el nombre de modelo más simple posible
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     detalles = ""
@@ -21,22 +25,26 @@ def asistente_tecnico_pro(jugadores_info):
         detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
     
     prompt = f"""
-    Actuá como un Ayudante de Campo de la liga argentina, bien apasionado.
-    Analizá este plantel de un manager de Virtual DT:
+    Actuá como un Ayudante de Campo experto del fútbol argentino.
+    Analizá este plantel de Virtual DT:
     {detalles}
     
-    1. Decime qué te parece el equipo (usá jerga como 'equipazo', 'le falta horno', etc).
-    2. Tirame un consejo de a quién poner de capitán hoy.
-    3. Si algún jugador tiene score bajo, decime si lo aguantamos o lo mandamos a la reserva.
-    4. Sé breve y motivador.
+    Dame un consejo corto para cada línea (Arq, Def, Vol, Del) y elegí un capitán.
+    Usá mucha jerga futbolera argentina.
     """
     
     try:
-        # LLAMADA SIMPLE: Sin herramientas extras para evitar el error 404
+        # Generación directa de contenido
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"⚠️ Error de conexión: {str(e)}"
+        # Si esto falla, probamos con la versión antigua del nombre
+        try:
+            model_alt = genai.GenerativeModel('gemini-pro')
+            response = model_alt.generate_content(prompt)
+            return response.text
+        except:
+            return f"⚠️ Error persistente: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
