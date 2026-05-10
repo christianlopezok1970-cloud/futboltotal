@@ -9,38 +9,32 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN IA ---
 import google.generativeai as genai
 
-# Usamos la clave nueva que me pasaste
+# Tu clave nueva que termina en zdcU
 genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión estándar para evitar errores de versión o de búsqueda."""
+    """Versión para forzar la detección del modelo y evitar el 404."""
     try:
-        # El modelo gemini-1.5-flash es el más rápido y estable
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # CAMBIO CLAVE: Agregamos '-latest' al final del nombre
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         
-        # Preparamos los datos de la plantilla
         detalles = ""
         for j in jugadores_info:
             detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
         
-        prompt = f"""
-        Actuá como un Ayudante de Campo experto y picante del fútbol argentino.
-        Analizá este plantel para el manager de Virtual DT:
-        {detalles}
+        prompt = f"Actuá como un DT argentino experto. Analizá este equipo y dame un consejo corto con jerga de vestuario: {detalles}"
         
-        INSTRUCCIONES:
-        1. Analizá las líneas (Arq, Def, Vol, Del).
-        2. Tirame una recomendación de quién debería ser el capitán.
-        3. Usá jerga de vestuario (fiera, máquina, está en el horno, etc.).
-        4. Sé breve pero con mucha personalidad futbolera.
-        """
-        
-        # Llamada directa (sin herramientas de búsqueda para que no dé 404)
         response = model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        return f"⚠️ El Profe tuvo un problema: {str(e)}"
+        # Si el anterior falla, intentamos con el Pro (que es el modelo hermano)
+        try:
+            model_pro = genai.GenerativeModel('gemini-1.5-pro')
+            response = model_pro.generate_content(prompt)
+            return response.text
+        except Exception as e2:
+            return f"⚠️ Error persistente: {str(e2)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
