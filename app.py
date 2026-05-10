@@ -3,13 +3,11 @@ import pandas as pd
 import sqlite3
 import random
 import time
-import google.generativeai as genai
+import google.generativeai as genai # Una sola vez está bien
 from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN IA ---
-import google.generativeai as genai
-
-# Reemplazá esto con tu clave NUEVA
+# Ya no hace falta repetir el import acá
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def asistente_tecnico_pro(jugadores_info):
@@ -180,43 +178,25 @@ st.subheader("TITULARES")
 dibujar_plantilla(titulares, "titular")
 
 st.divider()
-st.subheader("🔍 Consultar a un jugador específico")
+st.subheader("👨‍🏫 Charla Técnica con el Profe")
 
-# 1. Nos aseguramos de definir la variable de la clave
-# Si ya tenés este input más arriba en el código, fijate cómo se llama.
-# Si no lo tenés, agregalo acá:
-clave_api = st.text_input("Ingresá tu API Key para esta consulta:", type="password", key="clave_unica")
-
-jugador_busqueda = st.text_input("Escribí Nombre y Club (ej: Miguel Borja - River)")
-
-if st.button("Preguntarle al Profe por este"):
-    # 2. Usamos 'clave_api', que es la que definimos arriba
-    if jugador_busqueda and clave_api: 
-        try:
-            genai.configure(api_key=clave_api)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            prompt_especifico = f"""
-            Sos un DT argentino experto. BUSCÁ información real y actual sobre {jugador_busqueda}.
-            Estamos a 10 de mayo de 2026. Necesito saber:
-            1. ¿Jugó este último fin de semana?
-            2. ¿Cómo fue su rendimiento y qué dicen los medios?
-            3. ¿Está disponible para el próximo partido?
-            Responde con jerga de vestuario, sin vueltas.
-            """
-            
-            with st.spinner(f"El Profe está tirando líneas por {jugador_busqueda}..."):
-                # Intentamos con búsqueda web
-                response = model.generate_content(
-                    prompt_especifico,
-                    tools=[{'google_search_retrieval': {}}]
-                )
-                st.markdown(response.text)
-        except Exception as e:
-            st.error(f"Se cortó la comunicación: {str(e)}")
+# YA NO NECESITAMOS api_key_input PORQUE USAMOS EL SECRETO
+if st.button("📋 PEDIR INFORME DE LA FECHA", use_container_width=True):
+    if not titulares and not suplentes:
+        st.warning("No tenés jugadores en el equipo.")
     else:
-        st.warning("Faltan datos: asegurate de poner la clave y el nombre del jugador.")
+        # Armamos la lista para el Profe
+        plantel_completo = []
+        for j in titulares:
+            plantel_completo.append([j[1], j[2], "Titular", j[3]]) 
+        for j in suplentes:
+            plantel_completo.append([j[1], j[2], "Suplente", j[3]])
 
+        with st.status("El Profe está analizando el equipo...", expanded=True) as status:
+            # La función ahora va a andar directo porque ya configuramos la API arriba
+            informe = asistente_tecnico_pro(plantel_completo)
+            status.update(label="¡Informe listo!", state="complete")
+            st.markdown(informe)
 # --- 6. OJEADOR ---
 st.subheader("🕵️ OJEADOR")
 if st.button("BUSCAR JUGADOR (5 🪙)"):
