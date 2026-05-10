@@ -8,34 +8,38 @@ from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN IA ---
 import google.generativeai as genai
-from google.generativeai.types import RequestOptions
 
-# Tu clave nueva
+# Tu clave que termina en zdcU
 genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión definitiva: Forzamos la versión v1 para evitar el error 404 de la beta."""
+    """Versión simplificada al máximo para evitar incompatibilidades."""
     try:
-        # 1. Configuramos el modelo
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Usamos el modelo base sin prefijos ni versiones raras
+        model = genai.GenerativeModel('gemini-pro')
         
-        # 2. Preparamos los datos
         detalles = ""
         for j in jugadores_info:
             detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
         
-        prompt = f"Actuá como un DT argentino experto. Analizá este equipo y dame un consejo corto con jerga futbolera: {detalles}"
+        prompt = f"""
+        Actuá como un Ayudante de Campo de la liga argentina.
+        Analizá este plantel de Virtual DT:
+        {detalles}
+        Decime quién debería ser el capitán y dame un consejo corto con jerga de vestuario.
+        """
         
-        # 3. CAMBIO CLAVE: Forzamos la versión 'v1' en la llamada
-        response = model.generate_content(
-            prompt,
-            request_options=RequestOptions(api_version='v1')
-        )
-        
+        # Llamada bien básica
+        response = model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        return f"⚠️ Error del Profe: {str(e)}"
+        # Si gemini-pro falla, probamos con el flash a secas
+        try:
+            model_flash = genai.GenerativeModel('gemini-1.5-flash')
+            return model_flash.generate_content(prompt).text
+        except Exception as e2:
+            return f"⚠️ El Profe sigue con problemas: {str(e2)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
