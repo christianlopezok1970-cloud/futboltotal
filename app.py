@@ -213,7 +213,7 @@ with co1:
             ejecutar_db("UPDATE usuarios SET monedas = monedas - 5 WHERE id = ?", (u_id,), commit=True)
             with st.status("Buscando..."):
                 tiempo_espera = random.randint(5, 12) 
-            time.sleep(tiempo_espera)
+                time.sleep(tiempo_espera)
                 cand = df_base.sample(n=1).iloc[0]
                 precio = int((int(cand['Nivel']) * 15) * random.uniform(0.70, 1.30))
                 st.session_state.prospecto = {"n": cand['Jugador'], "p": cand['POS'], "l": int(cand['Nivel']), "e": cand['Equipo'], "s": float(cand['Score']), "pr": precio}
