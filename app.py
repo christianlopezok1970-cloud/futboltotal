@@ -7,7 +7,7 @@ import google.generativeai as genai
 from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN IA ---
-genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpls")
+genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpIs")
 
 def asistente_tecnico_pro(jugadores_info):
     """Analiza la plantilla usando búsqueda en Google."""
