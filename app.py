@@ -186,32 +186,25 @@ st.divider()
 st.subheader("👨‍🏫 Charla Técnica con el Profe")
 
 if st.button("📋 PEDIR INFORME DE LA FECHA (IA + WEB)", use_container_width=True):
-    # 1. Buscamos los datos reales directo de la base de datos para no fallar
-    try:
-        conn = sqlite3.connect('virtual_dt.db')
-        c = conn.cursor()
-        # Traemos: nombre, posición, si es titular o suplente, el club y el puntaje
-        c.execute("SELECT nombre, posicion, titular_suplente, equipo, score FROM jugadores")
-        datos_frescos = c.fetchall()
-        conn.close()
-    except Exception as e:
-        st.error(f"Error al leer la base de datos: {e}")
-        datos_frescos = []
+    # Usamos la misma lista que usás para 'titulares' y 'suplentes'
+    # Asumo que en tu código tenés una variable donde guardás todo antes de dibujar
+    
+    # Creamos una lista unificada para el Profe
+    plantel_completo = []
+    
+    # Si tenés las listas de 'titulares' y 'suplentes' cargadas arriba en tu código:
+    for j in titulares:
+        plantel_completo.append([j[1], j[2], "Titular", j[4], j[5]]) # Ajustá los índices según tu tupla
+    for j in suplentes:
+        plantel_completo.append([j[1], j[2], "Suplente", j[4], j[5]])
 
-    if not datos_frescos:
-        st.warning("No tenés jugadores cargados en el equipo.")
+    if not plantel_completo:
+        st.warning("No tenés jugadores en cancha ni en el banco.")
     else:
-        with st.status("El Profe está analizando Promiedos y Olé...", expanded=True) as status:
-            # 2. Le pasamos los 'datos_frescos' que acabamos de traer
-            informe = asistente_tecnico_pro(datos_frescos)
+        with st.status("El Profe está analizando el equipo...", expanded=True) as status:
+            informe = asistente_tecnico_pro(plantel_completo)
             status.update(label="¡Informe listo!", state="complete")
             st.markdown(informe)
-
-st.divider()
-
-st.subheader("SUPLENTES")
-# Acá seguís con tu función de dibujo normal
-dibujar_plantilla(suplentes, "suplente")
 
 # --- 6. OJEADOR ---
 st.subheader("🕵️ OJEADOR")
