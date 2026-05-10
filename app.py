@@ -8,33 +8,34 @@ from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN IA ---
 import google.generativeai as genai
+from google.generativeai.types import RequestOptions
 
-# Tu clave nueva que termina en zdcU
+# Tu clave nueva
 genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión para forzar la detección del modelo y evitar el 404."""
+    """Versión definitiva: Forzamos la versión v1 para evitar el error 404 de la beta."""
     try:
-        # CAMBIO CLAVE: Agregamos '-latest' al final del nombre
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # 1. Configuramos el modelo
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
+        # 2. Preparamos los datos
         detalles = ""
         for j in jugadores_info:
             detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
         
-        prompt = f"Actuá como un DT argentino experto. Analizá este equipo y dame un consejo corto con jerga de vestuario: {detalles}"
+        prompt = f"Actuá como un DT argentino experto. Analizá este equipo y dame un consejo corto con jerga futbolera: {detalles}"
         
-        response = model.generate_content(prompt)
+        # 3. CAMBIO CLAVE: Forzamos la versión 'v1' en la llamada
+        response = model.generate_content(
+            prompt,
+            request_options=RequestOptions(api_version='v1')
+        )
+        
         return response.text
         
     except Exception as e:
-        # Si el anterior falla, intentamos con el Pro (que es el modelo hermano)
-        try:
-            model_pro = genai.GenerativeModel('gemini-1.5-pro')
-            response = model_pro.generate_content(prompt)
-            return response.text
-        except Exception as e2:
-            return f"⚠️ Error persistente: {str(e2)}"
+        return f"⚠️ Error del Profe: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
