@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import google.generativeai as genai
 
 # Reemplazá esto con tu clave NUEVA
-NUEVA_CLAVE = "AIzaSyC8pTfER3kpkmZvczxlKhsQb_BCjrr8p1M" 
+NUEVA_CLAVE = "AIzaSyC8pTfEvczxlKhsQb_BCjrr8p1M" 
 
 genai.configure(api_key=NUEVA_CLAVE)
 
