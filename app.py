@@ -101,32 +101,52 @@ c1, c2 = st.columns(2)
 c1.metric("Presupuesto Actual", f"{int(monedas)} 🪙")
 
 # --- SISTEMA DE COBRO Y PUNTAJE ---
+# --- REEMPLAZA LA SECCIÓN DEL BOTÓN DE COBRO POR ESTA ---
+
 if len(titulares) == 11:
     jornada_actual = str(df_base['Jornada'].iloc[0]) if 'Jornada' in df_base.columns else "S/J"
-    ganancia = sum([int(max(0, j[4] - 60)) for j in titulares]) # Tu fórmula original
+    ganancia = sum([int(max(0, j[4] - 60)) for j in titulares])
     
     c2.markdown(f"📅 **{jornada_actual}** | 📈 **Puntos:** {ganancia}")
     
     ultima_cobrada = ejecutar_db("SELECT ultima_jornada FROM usuarios WHERE id = ?", (u_id,))[0][0]
 
     if ultima_cobrada == jornada_actual:
-        c2.success(f"✅ Jornada acreditada.")
+        c2.success(f"✅ Jornada ya acreditada.")
     else:
-        if c2.button("💰 COBRAR JORNADA", use_container_width=True, type="primary"):
-            # Lógica de simulación de resultado
+        # --- CAPA DE SEGURIDAD VISUAL ---
+        st.sidebar.divider() # Un separador para que se vea limpio
+        confirmar = c2.checkbox("Confirmar validez de la formación", key="check_seguridad")
+        
+        # El botón solo se habilita si 'confirmar' es True
+        if c2.button("💰 COBRAR JORNADA", 
+                     use_container_width=True, 
+                     type="primary", 
+                     disabled=not confirmar): # <--- Aquí está la clave
+            
+            # Ejecutamos el cobro
             gf, gc, p_pts = 0, 0, 0
             if ganancia < 40: gf, gc, p_pts = 0, 3, 0
             elif 40 <= ganancia <= 59: gf, gc, p_pts = 0, 1, 0
-            elif 60 <= ganancia <= 99: gf, gc, p_pts = 0, 0, 1
-            elif ganancia >= 100: gf, gc, p_pts = 2, 0, 3 # Simplificado para el ejemplo
+            elif 60 <= ganancia <= 99: gf, gc, p_pts = 1, 1, 1
+            elif ganancia >= 100: gf, gc, p_pts = 2, 0, 3
             
-            ejecutar_db("""UPDATE usuarios SET monedas = monedas + ?, ganancias_historicas = ganancias_historicas + ?,
-                        pts_liga = pts_liga + ?, pj = pj + 1, dg = dg + ?, ultima_jornada = ? WHERE id = ?""", 
+            ejecutar_db("""UPDATE usuarios SET 
+                        monedas = monedas + ?, 
+                        ganancias_historicas = ganancias_historicas + ?,
+                        pts_liga = pts_liga + ?, 
+                        pj = pj + 1, 
+                        dg = dg + ?, 
+                        ultima_jornada = ? 
+                        WHERE id = ?""", 
                         (ganancia, ganancia, p_pts, (gf-gc), jornada_actual, u_id), commit=True)
+            
+            st.balloons()
             st.success(f"¡Cobrado! Resultado: {gf}-{gc}")
+            time.sleep(2)
             st.rerun()
 else:
-    c2.warning(f"Faltan {11 - len(titulares)} titulares para cobrar.")
+    c2.warning(f"⚠️ Faltan {11 - len(titulares)} titulares")
 
 # --- 5. RENDERIZADO DE PLANTILLA ---
 def dibujar_plantilla(lista, modo="titular"):
