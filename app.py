@@ -184,17 +184,33 @@ dibujar_plantilla(titulares, "titular")
 # --- NUEVA SECCIÓN: ASISTENTE TÉCNICO ---
 st.divider()
 st.subheader("👨‍🏫 Charla Técnica con el Profe")
+
 if st.button("📋 PEDIR INFORME DE LA FECHA (IA + WEB)", use_container_width=True):
-    if not jugadores_db:
-        st.warning("No tenés jugadores.")
+    # 1. Buscamos los datos reales directo de la base de datos para no fallar
+    try:
+        conn = sqlite3.connect('virtual_dt.db')
+        c = conn.cursor()
+        # Traemos: nombre, posición, si es titular o suplente, el club y el puntaje
+        c.execute("SELECT nombre, posicion, titular_suplente, equipo, score FROM jugadores")
+        datos_frescos = c.fetchall()
+        conn.close()
+    except Exception as e:
+        st.error(f"Error al leer la base de datos: {e}")
+        datos_frescos = []
+
+    if not datos_frescos:
+        st.warning("No tenés jugadores cargados en el equipo.")
     else:
         with st.status("El Profe está analizando Promiedos y Olé...", expanded=True) as status:
-            informe = asistente_tecnico_pro(jugadores_db)
+            # 2. Le pasamos los 'datos_frescos' que acabamos de traer
+            informe = asistente_tecnico_pro(datos_frescos)
             status.update(label="¡Informe listo!", state="complete")
             st.markdown(informe)
+
 st.divider()
 
 st.subheader("SUPLENTES")
+# Acá seguís con tu función de dibujo normal
 dibujar_plantilla(suplentes, "suplente")
 
 # --- 6. OJEADOR ---
