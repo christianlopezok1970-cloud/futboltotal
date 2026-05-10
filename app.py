@@ -7,51 +7,49 @@ import google.generativeai as genai
 from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN IA ---
-genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpIs")
+# Asegúrate de que tu API Key sea la correcta y no tenga espacios
+genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpls")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Analiza la plantilla usando búsqueda en Google."""
-    # Usamos el modelo flash-001 o flash simplemente
-    # Si sigue fallando, probá con 'gemini-1.5-flash-latest'
-    model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+    """Analiza la plantilla usando búsqueda en Google con un Plan B si falla."""
     
+    # Usamos el nombre de modelo estándar para evitar el error 404
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # Preparamos los datos del plantel
     detalles = ""
     for j in jugadores_info:
+        # j[0]=Nombre, j[1]=Posición, j[3]=Equipo, j[4]=Score
         detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual en la app: {j[4]}\n"
     
+    # Armamos el mensaje con todas las instrucciones juntas
     prompt = f"""
-    Actuá como un Ayudante de Campo experto del fútbol argentino.
-    Analizá este plantel: {detalles}
-    Investigá si jugaron la última fecha y dame recomendaciones breves.
+    Actuá como un Ayudante de Campo experto y picante del fútbol argentino.
+    Analizá este plantel para el manager:
+    {detalles}
+    
+    INSTRUCCIONES:
+    1. Usá tu herramienta de búsqueda para ver si estos jugadores fueron titulares o figuras en la última fecha real.
+    2. Si alguno está lesionado, suspendido o se fue del club, avisale al manager.
+    3. Compará el Score de la app con la realidad. Si el score es 0 pero el tipo jugó, decile que actualice.
+    4. Sé breve, usá jerga de vestuario (ej: 'tronco', 'fiera', 'está en el horno') y dale una recomendación final de a quién vender y a quién poner de capitán.
     """
     
     try:
-        # Intentamos la generación
+        # PLAN A: Intento con búsqueda en Google (Grounding)
         response = model.generate_content(
             prompt, 
             tools=[{'google_search_retrieval': {}}]
         )
         return response.text
     except Exception as e:
-        # Si el error persiste, probamos sin la herramienta de búsqueda como "Plan B"
+        # PLAN B: Si falla la búsqueda web (por región o error de API), responde como IA normal
         try:
             response = model.generate_content(prompt)
-            return "*(Nota: Info basada en memoria, sin búsqueda web)* \n\n" + response.text
+            return "*(Nota: Sin conexión web en vivo)* \n\n" + response.text
         except Exception as e2:
-            return f"⚠️ Error definitivo: {str(e2)}"
-    
-    INSTRUCCIONES:
-    1. Usá tu herramienta de búsqueda para ver si estos jugadores fueron titulares o figuras en la última fecha real.
-    2. Si alguno está lesionado, suspendido o se fue del club, avisale al manager.
-    3. Sé breve, usá jerga de vestuario y dale una recomendación final de a quién vender y a quién poner de capitán.
-    """
-    try:
-        # Intentamos con búsqueda web
-        response = model.generate_content(prompt, tools=[{'google_search_retrieval': {}}])
-        return response.text
-    except Exception as e:
-        # ESTO ES LO QUE CAMBIA: Ahora nos va a decir el error real
-        return f"⚠️ Error técnico: {str(e)}"
+            # Si todo falla, mostramos el error técnico real
+            return f"⚠️ Error técnico: {str(e2)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
