@@ -14,49 +14,51 @@ genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 # --- CONFIGURACIÓN IA (VERSIÓN DEFINITIVA) ---
 def asistente_tecnico_pro(jugadores_info):
-    """Analiza jugador por jugador usando búsqueda web en tiempo real."""
+    """Versión que detecta el modelo y suma búsqueda web."""
     try:
-        # Usamos el modelo que ya sabemos que te funciona
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # 1. Volvemos a la detección automática que te dio resultado
+        modelos_disponibles = [m.name for m in genai.list_models() 
+                              if 'generateContent' in m.supported_generation_methods]
         
-        # Separamos titulares y suplentes para el análisis
+        # Elegimos el mejor nombre disponible (probablemente sea 'models/gemini-1.5-flash')
+        modelo_nombre = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
+        
+        # 2. Configuramos el modelo incluyendo la herramienta de búsqueda
+        # Si esto falla, el 'except' lo va a arreglar abajo
+        model = genai.GenerativeModel(
+            model_name=modelo_nombre,
+            tools=[{'google_search_retrieval': {}}]
+        )
+        
         titulares = [j for j in jugadores_info if j[2] == 'Titular']
         suplentes = [j for j in jugadores_info if j[2] == 'Suplente']
         
-        detalles_titulares = "\n".join([f"- {j[0]} ({j[1]}) - Club: {j[3]}" for j in titulares])
-        detalles_suplentes = "\n".join([f"- {j[0]} ({j[1]}) - Club: {j[3]}" for j in suplentes])
+        detalles = "TITULARES:\n" + "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in titulares])
+        detalles += "\n\nSUPLENTES:\n" + "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in suplentes])
         
         prompt = f"""
-        Actuá como un Ayudante de Campo experto del fútbol argentino. 
-        Hoy es {datetime.now().strftime('%d/%m/%Y')}.
+        Actuá como un DT argentino de raza. Hoy es {datetime.now().strftime('%d/%m/%Y')}.
+        Analizá estos jugadores uno por uno:
+        {detalles}
         
-        ANALIZÁ ESTOS JUGADORES TITULARES UNO POR UNO:
-        {detalles_titulares}
-        
-        Y ESTOS SUPLENTES:
-        {detalles_suplentes}
-        
-        INSTRUCCIONES PARA EL INFORME:
-        1. Para cada TITULAR: Usá la búsqueda web para ver si jugó el último partido de su club, qué puntaje le dieron los diarios o si está lesionado/suspendido para la próxima fecha.
-        2. Para los SUPLENTES: Mirá si alguno la rompió y merece subir al 11 inicial.
-        3. Usá jerga futbolera argentina (metió, fue un tronco, está entre algodones, es un distinto).
-        4. Sé directo: si alguien no juega, avisame para que lo saque ya.
+        INFORME REQUERIDO:
+        1. De cada titular: ¿Jugó la última fecha? ¿Está lesionado o suspendido para la que viene? ¿Qué tal rindió?
+        2. De los suplentes: ¿Hay alguno que la esté rompiendo y deba ser titular?
+        3. Usá jerga futbolera argentina a morir.
         """
         
-        # Intentamos con búsqueda en Google (Grounding)
-        try:
-            response = model.generate_content(
-                prompt,
-                tools=[{'google_search_retrieval': {}}]
-            )
-            return response.text
-        except:
-            # Plan B: Si la búsqueda web falla, que analice con su conocimiento
-            response = model.generate_content(prompt)
-            return "*(Nota: Sin conexión web en vivo, análisis basado en historial)* \n\n" + response.text
-            
+        response = model.generate_content(prompt)
+        return response.text
+        
     except Exception as e:
-        return f"⚠️ Problema en el vestuario: {str(e)}"
+        # PLAN B: Si la búsqueda da error (como el 404), tiramos el análisis sin búsqueda para que no se trabe
+        try:
+            modelo_nombre = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
+            model_simple = genai.GenerativeModel(modelo_nombre)
+            response = model_simple.generate_content(prompt)
+            return "*(Nota: Análisis táctico sin datos de internet)* \n\n" + response.text
+        except:
+            return f"⚠️ Error persistente: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
