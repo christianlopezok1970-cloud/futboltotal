@@ -11,20 +11,21 @@ from datetime import datetime, timedelta
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión final: Sin inventos y con el modelo correcto."""
+    """Versión Pro: Con acceso a Google Search para data real."""
     try:
-        # Buscamos el nombre del modelo dinámicamente para evitar el 404
-        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        modelo_ok = next((m for m in modelos if '1.5-flash' in m), modelos[0])
-        
-        model = genai.GenerativeModel(modelo_ok)
+        # 1. Configuramos el modelo con herramientas de búsqueda
+        model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            tools=[{'google_search_retrieval': {}}] # <--- ESTO ES LO QUE TE DA EL DATO REAL
+        )
         
         titulares = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Titular'])
         suplentes = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Suplente'])
 
+        # 2. El prompt ahora le EXIGE buscar
         prompt = f"""
         Sos un Ayudante de Campo de la Liga Argentina. Hoy es 10/05/2026.
-        DATOS REALES SOLAMENTE. Analizá estos jugadores de mi equipo:
+        USÁ GOOGLE SEARCH para verificar estos jugadores. 
         
         TITULARES:
         {titulares}
@@ -33,10 +34,10 @@ def asistente_tecnico_pro(jugadores_info):
         {suplentes}
         
         TAREA:
-        1. Analizá si jugaron este último finde (FECHA REAL) y si están aptos para la que viene.
-        2. Si algún suplente debe ser titular porque la rompió, avisame.
-        3. Si NO TENÉS INFORMACIÓN REAL de un jugador, decilo: "De este no tengo el dato fino". 
-        NO INVENTES APODOS NI RESULTADOS.
+        1. Buscá si jugaron el último fin de semana (8-10 de mayo 2026) en Olé o Promiedos.
+        2. Informá rendimiento, goles o lesiones.
+        3. Si algún suplente merece el puesto, avisame.
+        4. Sé picante y futbolero, pero basado en DATA REAL que encuentres en internet.
         """
         
         response = model.generate_content(prompt)
@@ -177,26 +178,47 @@ st.divider()
 st.subheader("TITULARES")
 dibujar_plantilla(titulares, "titular")
 
+# --- NUEVA SECCIÓN: CHARLA DIRECTA CON EL PROFE ---
 st.divider()
-st.subheader("👨‍🏫 Charla Técnica con el Profe")
+st.subheader("👨‍🏫 Charla Técnica Personalizada")
 
-# YA NO NECESITAMOS api_key_input PORQUE USAMOS EL SECRETO
-if st.button("📋 PEDIR INFORME DE LA FECHA", use_container_width=True):
-    if not titulares and not suplentes:
-        st.warning("No tenés jugadores en el equipo.")
+# El Profe toma la iniciativa
+st.info("¡Buenas, Jefe! El equipo está listo, pero si tenés dudas con alguno en particular, tirame el nombre.")
+jugador_a_la_lupa = st.text_input("❓ ¿Qué jugador necesitás analizar?")
+
+if st.button("Consultar al Profe"):
+    if not jugador_a_la_lupa:
+        st.warning("Jefe, no me pusiste ningún nombre. ¿A quién mandamos a la balanza?")
     else:
-        # Armamos la lista para el Profe
-        plantel_completo = []
-        for j in titulares:
-            plantel_completo.append([j[1], j[2], "Titular", j[3]]) 
-        for j in suplentes:
-            plantel_completo.append([j[1], j[2], "Suplente", j[3]])
+        with st.status(f"El Profe está buscando data fresca de {jugador_a_la_lupa}...", expanded=True) as status:
+            try:
+                # Configuramos el modelo con acceso a Google Search
+                model = genai.GenerativeModel(
+                    model_name='gemini-1.5-flash',
+                    tools=[{'google_search_retrieval': {}}]
+                )
+                
+                prompt_directo = f"""
+                Sos un DT argentino experto (estilo Bilardo o Caruso). 
+                Hoy es 10 de mayo de 2026. 
+                BUSCÁ información real en Olé, TyC Sports y Promiedos sobre el jugador: {jugador_a_la_lupa}.
+                
+                Necesito que me digas:
+                1. ¿Jugó este último fin de semana? (Dame detalles: goles, amarillas, puntaje).
+                2. ¿Cómo viene físicamente? ¿Está para jugar el próximo partido?
+                3. Un veredicto final bien futbolero: ¿Es un distinto o está para el banco?
+                
+                Respondé con jerga argentina, directo y al hueso.
+                """
+                
+                response = model.generate_content(prompt_directo)
+                status.update(label="¡Informe listo!", state="complete")
+                st.markdown(response.text)
+                
+            except Exception as e:
+                st.error(f"Se nos cortó el llamado al predio: {e}")
 
-        with st.status("El Profe está analizando el equipo...", expanded=True) as status:
-            # La función ahora va a andar directo porque ya configuramos la API arriba
-            informe = asistente_tecnico_pro(plantel_completo)
-            status.update(label="¡Informe listo!", state="complete")
-            st.markdown(informe)
+st.divider()
 # --- 6. OJEADOR ---
 st.subheader("🕵️ OJEADOR")
 if st.button("BUSCAR JUGADOR (5 🪙)"):
