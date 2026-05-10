@@ -183,37 +183,41 @@ dibujar_plantilla(titulares, "titular")
 
 st.divider()
 st.subheader("🔍 Consultar a un jugador específico")
+
+# 1. Nos aseguramos de definir la variable de la clave
+# Si ya tenés este input más arriba en el código, fijate cómo se llama.
+# Si no lo tenés, agregalo acá:
+clave_api = st.text_input("Ingresá tu API Key para esta consulta:", type="password", key="clave_unica")
+
 jugador_busqueda = st.text_input("Escribí Nombre y Club (ej: Miguel Borja - River)")
 
 if st.button("Preguntarle al Profe por este"):
-    if jugador_busqueda and api_key_input: # Usamos la clave que pegaste antes
-        genai.configure(api_key=api_key_input)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        # El prompt ahora es hiper-específico para forzar la búsqueda
-        prompt_especifico = f"""
-        Sos un DT argentino experto. BUSCÁ información real y actual sobre {jugador_busqueda}.
-        Necesito saber:
-        1. ¿Jugó este último fin de semana (8-10 de mayo de 2026)?
-        2. ¿Cómo fue su rendimiento (según diarios como Olé o TyC)?
-        3. ¿Tiene alguna molestia física o suspensión para la próxima fecha?
-        Responde con jerga futbolera, sin vueltas.
-        """
-        
-        with st.spinner(f"El Profe está llamando a sus contactos por {jugador_busqueda}..."):
-            try:
-                # Intentamos forzar la búsqueda web
+    # 2. Usamos 'clave_api', que es la que definimos arriba
+    if jugador_busqueda and clave_api: 
+        try:
+            genai.configure(api_key=clave_api)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            prompt_especifico = f"""
+            Sos un DT argentino experto. BUSCÁ información real y actual sobre {jugador_busqueda}.
+            Estamos a 10 de mayo de 2026. Necesito saber:
+            1. ¿Jugó este último fin de semana?
+            2. ¿Cómo fue su rendimiento y qué dicen los medios?
+            3. ¿Está disponible para el próximo partido?
+            Responde con jerga de vestuario, sin vueltas.
+            """
+            
+            with st.spinner(f"El Profe está tirando líneas por {jugador_busqueda}..."):
+                # Intentamos con búsqueda web
                 response = model.generate_content(
                     prompt_especifico,
                     tools=[{'google_search_retrieval': {}}]
                 )
                 st.markdown(response.text)
-            except:
-                # Si las tools fallan, que responda con lo que sabe
-                response = model.generate_content(prompt_especifico)
-                st.markdown(response.text)
+        except Exception as e:
+            st.error(f"Se cortó la comunicación: {str(e)}")
     else:
-        st.warning("Poné el nombre y la API Key, jefe.")
+        st.warning("Faltan datos: asegurate de poner la clave y el nombre del jugador.")
 
 # --- 6. OJEADOR ---
 st.subheader("🕵️ OJEADOR")
