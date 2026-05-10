@@ -13,35 +13,34 @@ import google.generativeai as genai
 genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 # --- CONFIGURACIÓN IA (VERSIÓN DEFINITIVA) ---
-import google.generativeai as genai
-from google.generativeai import client
-
-# Tu clave (zdcU)
-genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
-
 def asistente_tecnico_pro(jugadores_info):
-    """Fuerza la comunicación con la versión estable para matar el 404."""
+    """Detecta automáticamente el modelo disponible para evitar el 404."""
     try:
-        # Forzamos al cliente a usar la versión estable 'v1'
-        # Esto suele solucionar el problema cuando la librería está 'trabada'
-        config_estable = {'api_version': 'v1'}
-        model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash'
-        )
+        # 1. Buscamos qué modelos tenés habilitados realmente
+        modelos_disponibles = [m.name for m in genai.list_models() 
+                              if 'generateContent' in m.supported_generation_methods]
+        
+        if not modelos_disponibles:
+            return "⚠️ No tenés modelos disponibles con esta API Key."
+
+        # 2. Elegimos el mejor disponible (preferimos flash, sino el que haya)
+        # Buscamos alguno que diga '1.5-flash', si no, agarramos el primero de la lista
+        modelo_a_usar = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
+        
+        # 3. Configuramos el modelo con ese nombre exacto
+        model = genai.GenerativeModel(modelo_a_usar)
         
         detalles = ""
         for j in jugadores_info:
             detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score: {j[4]}\n"
         
-        prompt = f"DT argentino analiza este equipo: {detalles}. Elegí capitán y hablá con jerga."
+        prompt = f"Actuá como un DT argentino. Analizá este equipo y dame un consejo corto con jerga: {detalles}"
         
-        # Intentamos la generación
         response = model.generate_content(prompt)
         return response.text
         
     except Exception as e:
-        # Si sigue fallando, es probable que la librería necesite una 'limpieza' física
-        return f"⚠️ Error crítico: {str(e)}"
+        return f"⚠️ Error en detección: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
