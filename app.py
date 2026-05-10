@@ -181,36 +181,39 @@ st.divider()
 st.subheader("TITULARES")
 dibujar_plantilla(titulares, "titular")
 
-# --- NUEVA SECCIÓN: ASISTENTE TÉCNICO ---
 st.divider()
-st.subheader("👨‍🏫 Charla Técnica con el Profe")
+st.subheader("🔍 Consultar a un jugador específico")
+jugador_busqueda = st.text_input("Escribí Nombre y Club (ej: Miguel Borja - River)")
 
-if st.button("📋 PEDIR INFORME DE LA FECHA (IA + WEB)", use_container_width=True):
-    # Creamos la lista para el Profe
-    plantel_completo = []
-    
-    # IMPORTANTE: Aquí ajustamos qué columna es cada cosa.
-    # Si 'titulares' es una lista de lo que trajiste de la DB:
-    # j[0] suele ser el ID, j[1] el Nombre, j[2] la Posición, j[3] el Equipo...
-    
-    try:
-        for j in titulares:
-            # PROBÁ ESTE ORDEN: Nombre, Posición, Estado, Equipo
-            # Si se ve mal, cambiamos los números.
-            plantel_completo.append([j[1], j[2], "Titular", j[3]]) 
-            
-        for j in suplentes:
-            plantel_completo.append([j[1], j[2], "Suplente", j[3]])
-
-        if not plantel_completo:
-            st.warning("No hay jugadores cargados.")
-        else:
-            with st.status("El Profe está buscando los nombres reales...", expanded=True) as status:
-                informe = asistente_tecnico_pro(plantel_completo)
-                status.update(label="¡Informe listo!", state="complete")
-                st.markdown(informe)
-    except Exception as e:
-        st.error(f"Hubo un lío con los datos: {e}. Revisá el orden de las columnas.")
+if st.button("Preguntarle al Profe por este"):
+    if jugador_busqueda and api_key_input: # Usamos la clave que pegaste antes
+        genai.configure(api_key=api_key_input)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # El prompt ahora es hiper-específico para forzar la búsqueda
+        prompt_especifico = f"""
+        Sos un DT argentino experto. BUSCÁ información real y actual sobre {jugador_busqueda}.
+        Necesito saber:
+        1. ¿Jugó este último fin de semana (8-10 de mayo de 2026)?
+        2. ¿Cómo fue su rendimiento (según diarios como Olé o TyC)?
+        3. ¿Tiene alguna molestia física o suspensión para la próxima fecha?
+        Responde con jerga futbolera, sin vueltas.
+        """
+        
+        with st.spinner(f"El Profe está llamando a sus contactos por {jugador_busqueda}..."):
+            try:
+                # Intentamos forzar la búsqueda web
+                response = model.generate_content(
+                    prompt_especifico,
+                    tools=[{'google_search_retrieval': {}}]
+                )
+                st.markdown(response.text)
+            except:
+                # Si las tools fallan, que responda con lo que sabe
+                response = model.generate_content(prompt_especifico)
+                st.markdown(response.text)
+    else:
+        st.warning("Poné el nombre y la API Key, jefe.")
 
 # --- 6. OJEADOR ---
 st.subheader("🕵️ OJEADOR")
