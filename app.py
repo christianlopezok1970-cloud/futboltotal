@@ -7,44 +7,40 @@ import google.generativeai as genai
 from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN IA ---
-# IMPORTANTE: He corregido la clave según tu captura de pantalla (termina en pls)
-genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpIs")
+import google.generativeai as genai
 
-# --- CONFIGURACIÓN IA ---
-# Asegurate de que la clave sea la que termina en "pls"
-genai.configure(api_key="AIzaSyAlgzic2DiHW5PqEr-CMgktTk41g6jDpls")
+# Usamos la clave nueva que me pasaste
+genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión blindada: Sin herramientas raras para evitar el error 404."""
-    
-    # Probamos con el nombre de modelo más simple posible
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
-    detalles = ""
-    for j in jugadores_info:
-        detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
-    
-    prompt = f"""
-    Actuá como un Ayudante de Campo experto del fútbol argentino.
-    Analizá este plantel de Virtual DT:
-    {detalles}
-    
-    Dame un consejo corto para cada línea (Arq, Def, Vol, Del) y elegí un capitán.
-    Usá mucha jerga futbolera argentina.
-    """
-    
+    """Versión estándar para evitar errores de versión o de búsqueda."""
     try:
-        # Generación directa de contenido
+        # El modelo gemini-1.5-flash es el más rápido y estable
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Preparamos los datos de la plantilla
+        detalles = ""
+        for j in jugadores_info:
+            detalles += f"- {j[0]} ({j[1]}) del club {j[3]}. Score actual: {j[4]}\n"
+        
+        prompt = f"""
+        Actuá como un Ayudante de Campo experto y picante del fútbol argentino.
+        Analizá este plantel para el manager de Virtual DT:
+        {detalles}
+        
+        INSTRUCCIONES:
+        1. Analizá las líneas (Arq, Def, Vol, Del).
+        2. Tirame una recomendación de quién debería ser el capitán.
+        3. Usá jerga de vestuario (fiera, máquina, está en el horno, etc.).
+        4. Sé breve pero con mucha personalidad futbolera.
+        """
+        
+        # Llamada directa (sin herramientas de búsqueda para que no dé 404)
         response = model.generate_content(prompt)
         return response.text
+        
     except Exception as e:
-        # Si esto falla, probamos con la versión antigua del nombre
-        try:
-            model_alt = genai.GenerativeModel('gemini-pro')
-            response = model_alt.generate_content(prompt)
-            return response.text
-        except:
-            return f"⚠️ Error persistente: {str(e)}"
+        return f"⚠️ El Profe tuvo un problema: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
