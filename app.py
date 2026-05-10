@@ -9,50 +9,44 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN IA ---
 import google.generativeai as genai
 
-# Tu clave (zdcU)
-genai.configure(api_key="AIzaSyB7t9PwFp2_ySxFj8F-vMHrt6LHiSLzdcU")
+# Reemplazá esto con tu clave NUEVA
+NUEVA_CLAVE = "AIzaSyD-EMbUYj_Gdodz80BHWwDwQMXiU5I2ND8" 
+
+genai.configure(api_key=NUEVA_CLAVE)
 
 def asistente_tecnico_pro(jugadores_info):
-    """Versión 2026: Sin herramientas que den error 404, pero con datos reales."""
+    """Versión final: Sin inventos y con el modelo correcto."""
     try:
-        # 1. Detectamos el nombre del modelo que te funcionó antes
-        modelos_disponibles = [m.name for m in genai.list_models() 
-                              if 'generateContent' in m.supported_generation_methods]
-        modelo_nombre = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
+        # Buscamos el nombre del modelo dinámicamente para evitar el 404
+        modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        modelo_ok = next((m for m in modelos if '1.5-flash' in m), modelos[0])
         
-        # 2. Configuramos el modelo SIN las tools (para evitar el 404)
-        model = genai.GenerativeModel(modelo_nombre)
+        model = genai.GenerativeModel(modelo_ok)
         
-        # 3. Preparamos la data real de tu base de datos
-        titulares = [j for j in jugadores_info if j[2] == 'Titular']
-        suplentes = [j for j in jugadores_info if j[2] == 'Suplente']
-        
-        lista_titulares = "\n".join([f"- {j[0]} (Club: {j[3]}, Pos: {j[1]})" for j in titulares])
-        lista_suplentes = "\n".join([f"- {j[0]} (Club: {j[3]}, Pos: {j[1]})" for j in suplentes])
+        titulares = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Titular'])
+        suplentes = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Suplente'])
 
         prompt = f"""
-        SOS UN EXPERTO EN FÚTBOL ARGENTINO (DÍA: {datetime.now().strftime('%d/%m/%Y')}).
-        NO INVENTES NOMBRES. ANALIZÁ EXACTAMENTE A ESTOS JUGADORES:
-
+        Sos un Ayudante de Campo de la Liga Argentina. Hoy es 10/05/2026.
+        DATOS REALES SOLAMENTE. Analizá estos jugadores de mi equipo:
+        
         TITULARES:
-        {lista_titulares}
-
+        {titulares}
+        
         SUPLENTES:
-        {lista_suplentes}
-
+        {suplentes}
+        
         TAREA:
-        1. De cada uno, informame si jugaron este último fin de semana en la vida real.
-        2. Decime si están lesionados, suspendidos o si se sabe que descansan la próxima fecha.
-        3. Si alguno de los SUPLENTES tuvo un partidazo, recomendame subirlo.
-        4. Hablá como un ayudante de campo argentino, pero con DATOS REALES. Si no sabés algo de un jugador, decilo, no inventes.
+        1. Analizá si jugaron este último finde (FECHA REAL) y si están aptos para la que viene.
+        2. Si algún suplente debe ser titular porque la rompió, avisame.
+        3. Si NO TENÉS INFORMACIÓN REAL de un jugador, decilo: "De este no tengo el dato fino". 
+        NO INVENTES APODOS NI RESULTADOS.
         """
         
-        # Generación directa
         response = model.generate_content(prompt)
         return response.text
-        
     except Exception as e:
-        return f"⚠️ Error en el vestuario: {str(e)}"
+        return f"⚠️ Error: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
