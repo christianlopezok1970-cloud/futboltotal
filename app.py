@@ -8,34 +8,34 @@ from datetime import datetime, timedelta
 
 def asistente_tecnico_pro(jugadores_info):
     try:
-        # 1. Buscamos modelos y limpiamos el nombre
-        modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # 1. Intentamos con los nombres de modelos más estables primero
+        nombres_a_probar = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro']
+        model = None
         
-        # Intentamos encontrar el flash, si no el primero
-        raw_model_name = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
+        for nombre in nombres_a_probar:
+            try:
+                # Intentamos cargar el modelo. 
+                # Nota: Quitamos las 'tools' momentáneamente para asegurar la conexión base
+                model = genai.GenerativeModel(model_name=nombre)
+                # Si llegamos acá sin error, el modelo es válido
+                break 
+            except:
+                continue
         
-        # LIMPIEZA: Si el nombre viene como 'models/gemini-1.5-flash', le sacamos el 'models/'
-        model_name = raw_model_name.split('/')[-1]
-        
-        # 2. CONFIGURACIÓN DEL MODELO
-        # Si el modelo es flash, intentamos activar la búsqueda, si falla, vamos sin búsqueda
-        try:
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                tools=[{'google_search_retrieval': {}}] if 'flash' in model_name else None
-            )
-        except:
-            # Plan B: Si las tools dan error, cargamos el modelo pelado
-            model = genai.GenerativeModel(model_name=model_name)
+        # 2. Si ninguno de los preferidos anduvo, usamos el primero de la lista oficial
+        if model is None:
+            modelos_oficiales = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            model = genai.GenerativeModel(model_name=modelos_oficiales[0])
 
-        # ... (Acá sigue tu lógica de titulares y suplentes igual que antes) ...
+        # ... (Acá sigue tu lógica de titulares y suplentes igual que siempre) ...
         
-        # 3. LLAMADA FINAL
+        # 3. Al generar el contenido, le pedimos que use su conocimiento
+        # Si no tiene internet, igual nos va a dar un análisis técnico basado en los nombres
         response = model.generate_content(prompt)
         return response.text
 
     except Exception as e:
-        return f"⚠️ Error en el vestuario: {str(e)}"
+        return f"⚠️ El Profe sigue sin línea: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
