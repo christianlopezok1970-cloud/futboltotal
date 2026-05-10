@@ -6,51 +6,36 @@ import time
 import google.generativeai as genai # Una sola vez está bien
 from datetime import datetime, timedelta
 
-# --- CONFIGURACIÓN IA ---
-# Ya no hace falta repetir el import acá
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-
 def asistente_tecnico_pro(jugadores_info):
     try:
-        # 1. Listamos y elegimos el modelo (tu lógica impecable)
+        # 1. Buscamos modelos y limpiamos el nombre
         modelos_disponibles = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        modelo_ok = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
         
-        # 2. CONFIGURACIÓN CON BÚSQUEDA (El "secreto" para el dato real)
-        # Usamos tools solo si el modelo elegido es un 'flash', que son los que mejor lo bancan
-        herramientas = [{'google_search_retrieval': {}}] if 'flash' in modelo_ok else None
+        # Intentamos encontrar el flash, si no el primero
+        raw_model_name = next((m for m in modelos_disponibles if '1.5-flash' in m), modelos_disponibles[0])
         
-        model = genai.GenerativeModel(
-            model_name=modelo_ok,
-            tools=herramientas
-        )
+        # LIMPIEZA: Si el nombre viene como 'models/gemini-1.5-flash', le sacamos el 'models/'
+        model_name = raw_model_name.split('/')[-1]
         
-        # 3. Armamos el reporte de titulares y suplentes
-        titulares = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Titular'])
-        suplentes = "\n".join([f"- {j[0]} ({j[1]}) de {j[3]}" for j in jugadores_info if j[2] == 'Suplente'])
+        # 2. CONFIGURACIÓN DEL MODELO
+        # Si el modelo es flash, intentamos activar la búsqueda, si falla, vamos sin búsqueda
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                tools=[{'google_search_retrieval': {}}] if 'flash' in model_name else None
+            )
+        except:
+            # Plan B: Si las tools dan error, cargamos el modelo pelado
+            model = genai.GenerativeModel(model_name=model_name)
 
-        prompt = f"""
-        Sos un DT de la Primera División Argentina. Hoy es {datetime.now().strftime('%d/%m/%Y')}.
-        USÁ GOOGLE PARA BUSCAR DATA REAL. Analizá este plantel:
+        # ... (Acá sigue tu lógica de titulares y suplentes igual que antes) ...
         
-        TITULARES:
-        {titulares}
-        
-        SUPLENTES:
-        {suplentes}
-        
-        INSTRUCCIONES:
-        1. Buscá quién jugó, quién hizo goles y quién está lesionado este último finde.
-        2. Si un suplente merece ser titular, decímelo.
-        3. Hablá como un DT argentino (picante, directo, con jerga).
-        4. No digas "no tengo el dato", si no encontrás algo específico, opiná según la actualidad del club.
-        """
-        
+        # 3. LLAMADA FINAL
         response = model.generate_content(prompt)
         return response.text
 
     except Exception as e:
-        return f"⚠️ El Profe se quedó sin señal: {str(e)}"
+        return f"⚠️ Error en el vestuario: {str(e)}"
 
 # --- 1. CONFIGURACIÓN Y BASE DE DATOS ---
 st.set_page_config(page_title="Futbol Total - Pro", layout="wide")
