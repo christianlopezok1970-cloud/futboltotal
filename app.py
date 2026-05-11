@@ -1,26 +1,34 @@
-# 90 minutos de pura adrenalina selectiva
-    # CAMBIAMOS 'min' por 'minuto'
+if st.button("🏁 INICIAR PARTIDO"):
+    # --- Todo esto debe tener 4 espacios de sangría ---
+    marcador = st.empty()
+    progreso = st.progress(0)
+    cronica = st.container()
+    
+    g_l, g_v = 0, 0
+    p_l, p_r = float(p_loc_ini), float(p_riv_ini)
+    
+    # El 'for' debe estar alineado con 'marcador', 'progreso', etc.
     for minuto in range(1, 96):
         dado = random.randint(1, 1000)
         
-        # --- VELOCIDAD ---
+        # --- Lo que está dentro del 'for' tiene 8 espacios (4 del if + 4 del for) ---
         if dado > 940:
             time.sleep(1.2)
         else:
             time.sleep(0.05)
             
-        # --- ACTUALIZAR UI ---
         marcador.markdown(f"<h1 style='text-align: center;'>{mi_club} {g_l} — {g_v} {rival}</h1>", unsafe_allow_html=True)
-        
-        # Ahora min() funciona perfecto porque no está 'pisada'
         progreso.progress(min(minuto / 90, 1.0))
 
-        # --- LÓGICA DE EVENTOS (FILTRADO) ---
         if dado > 940:
-            # Acordate de cambiar 'min' por 'minuto' en todos los f-strings de abajo
             ataque = p_l + random.randint(1, 500)
             defensa = p_r + random.randint(1, 500)
             
             if ataque > (defensa + 130):
                 g_l += 1
                 cronica.error(f"⚽ **{minuto}' - ¡GOOOOOL!** {mi_club} aprovecha un hueco.")
+            elif defensa > (ataque + 130):
+                g_v += 1
+                cronica.error(f"💀 **{minuto}' - ¡GOL!** {rival} golpea de contra.")
+            else:
+                cronica.info(f"🧤 **{minuto}' - ¡CERCA!** El arquero desvía al córner.")
