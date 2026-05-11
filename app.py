@@ -2,86 +2,85 @@ import streamlit as st
 import random
 import time
 
-st.set_page_config(page_title="LPF Sandbox", layout="wide")
+st.set_page_config(page_title="Sandbox LPF", layout="wide")
 
-st.title("⚽ Simulación de Partido: Azar Total")
+# --- INTERFAZ ---
+st.title("⚽ Simulador de Gestión Dinámica")
+st.sidebar.header("Ajustes del Encuentro")
 
-# --- SIDEBAR: CONFIGURACIÓN ---
-st.sidebar.header("Ajustes del Sandbox")
 mi_club = st.sidebar.text_input("Tu Club", "Estudiantes LP")
 rival_nombre = st.sidebar.text_input("Rival", "Gimnasia LP")
 
-col_prev_1, col_prev_2 = st.sidebar.columns(2)
-poder_local_ini = col_prev_1.number_input(f"Poder {mi_club}", 100, 1000, 750)
-poder_rival_ini = col_prev_2.number_input(f"Poder {rival_nombre}", 100, 1000, 720)
+# Sliders para el poder
+p_loc_ini = st.sidebar.slider(f"Poder {mi_club}", 100, 1000, 750)
+p_riv_ini = st.sidebar.slider(f"Poder {rival_nombre}", 100, 1000, 720)
 
-# --- ESPACIO DE JUEGO ---
-if st.button("🏟️ PITAZO INICIAL"):
-    # Contenedores para que la info no salte
+if st.button("🏟️ EMPEZAR SIMULACIÓN"):
     marcador_spot = st.empty()
-    progreso_tiempo = st.progress(0)
+    progreso = st.progress(0)
     
     col1, col2 = st.columns([2, 1])
     with col1:
-        cronica = st.container(height=400)
+        cronica = st.container(height=450)
     with col2:
-        st.write("📊 **Estado de los Planteles**")
         stats_vivas = st.empty()
     
-    goles_l, goles_v = 0, 0
-    p_local = float(poder_local_ini)
-    p_rival = float(poder_rival_ini)
+    g_l, g_v = 0, 0
+    p_l, p_r = float(p_loc_ini), float(p_riv_ini)
 
-    # --- MOTOR DE 90 MINUTOS ---
-    for min in range(1, 92):
-        # Velocidad de los minutos (ajustable para realismo)
-        time.sleep(0.08) 
-        
-        # 1. ACTUALIZAR INTERFAZ (Marcador y Barras)
-        marcador_spot.markdown(f"<h1 style='text-align: center;'>{mi_club} {goles_l} - {goles_v} {rival_nombre}</h1>", unsafe_allow_html=True)
-        progreso_tiempo.progress(min / 90 if min <= 90 else 1.0)
-        
-        stats_vivas.markdown(f"""
-            **{mi_club}**: {int(p_local)} ⚡  
-            **{rival_nombre}**: {int(p_rival)} ⚡
-        """)
-
-        # 2. EL DADO DE 1000 CARAS (Acción General)
+    for minuto in range(1, 91):
+        # 🎲 EL DADO DE 1000 CARAS
         dado = random.randint(1, 1000)
         
-        # 3. LÓGICA DE MINUTO A MINUTO
-        
-        # 🟢 NADA PASA (85% de probabilidad)
-        if dado < 850:
-            if min % 15 == 0: # Solo avisar cada tanto para no aburrir
-                cronica.write(f"⏱️ {min}' - Mucha fricción en el medio. Nadie cede espacio.")
-        
-        # 🟡 PELIGRO (10% de probabilidad)
-        elif 850 <= dado < 950:
-            if random.random() > 0.5:
-                cronica.write(f"⚠️ {min}' - ¡Llegó el Pincha! Pero el remate salió desviado.")
-            else:
-                cronica.write(f"⚠️ {min}' - El rival presiona alto, casi recuperan en el área.")
-        
-        # 🔴 CHANCE CLARA / GOL (5% de probabilidad)
+        # --- LÓGICA DE TIEMPO (Pausas dinámicas) ---
+        if dado >= 850:
+            espera = 1.2  # Pausa larga para eventos importantes
         else:
-            # Choque de Dados Individuales + Poder
-            tiro_l = p_local + random.randint(1, 200)
-            tiro_v = p_rival + random.randint(1, 200)
+            espera = 0.15 # Minutos de relleno pasan rápido
+        
+        time.sleep(espera) 
+        
+        # --- ACTUALIZAR PANTALLA ---
+        marcador_spot.markdown(f"<h1 style='text-align: center; color: #FF4B4B;'>{mi_club} {g_l} — {g_v} {rival_nombre}</h1>", unsafe_allow_html=True)
+        progreso.progress(minuto / 90)
+        
+        stats_vivas.markdown(f"""
+        ### Estado actual
+        **{mi_club}**: {int(p_l)} pts  
+        **{rival_nombre}**: {int(p_r)} pts
+        ---
+        *El cansancio reduce el poder cada minuto.*
+        """)
+
+        # --- EVENTOS ---
+        if dado < 850:
+            # Solo escribimos en la crónica cada tanto para no scrolear infinito
+            if minuto % 10 == 0:
+                cronica.write(f"⏱️ {minuto}' - El partido se juega lejos de las áreas.")
+        
+        elif 850 <= dado < 960:
+            cronica.warning(f"⚠️ {minuto}' - ¡Peligro! El azar genera una aproximación clara.")
             
-            if tiro_l > tiro_v + 100:
-                goles_l += 1
-                cronica.write(f"⚽ **{min}' - ¡GOOOOOL DE {mi_club.upper()}!**")
-                st.toast("¡GOL!")
-            elif tiro_v > tiro_l + 100:
-                goles_v += 1
-                cronica.write(f"💀 **{min}' - ¡GOL DE {rival_nombre.upper()}!**")
+        else: # EL DADO TIRÓ CHANCE DE GOL (961-1000)
+            # Duelo de dados finales
+            tiro_l = p_l + random.randint(1, 300)
+            tiro_v = p_r + random.randint(1, 300)
+            
+            if tiro_l > tiro_v + 150:
+                g_l += 1
+                cronica.error(f"⚽ {minuto}' - ¡GOOOOOL DE {mi_club.upper()}!")
+                st.balloons()
+                time.sleep(2) # Pausa de festejo
+            elif tiro_v > tiro_l + 150:
+                g_v += 1
+                cronica.error(f"💀 {minuto}' - ¡GOL DE {rival_nombre.upper()}!")
+                time.sleep(2) # Pausa de lamento
             else:
-                cronica.write(f"🧤 {min}' - ¡Atajadón! Se salvaron de milagro.")
+                cronica.info(f"🧤 {minuto}' - ¡TREMENDO! El arquero evita el gol en la línea.")
+                time.sleep(1)
 
-        # 4. DESGASTE FÍSICO (Sandbox)
-        # El equipo local se cansa un poco más si va ganando (presión)
-        p_local -= random.uniform(0.1, 0.5)
-        p_rival -= random.uniform(0.1, 0.5)
+        # Desgaste
+        p_l -= 0.6
+        p_r -= 0.6
 
-    st.success("🏁 Final del encuentro.")
+    st.success("🏁 Partido Finalizado.")
