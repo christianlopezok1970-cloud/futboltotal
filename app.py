@@ -1,3 +1,8 @@
+
+import streamlit as st
+import random
+import time
+
 if st.button("🏁 INICIAR PARTIDO"):
     # --- Todo esto debe tener 4 espacios de sangría ---
     marcador = st.empty()
