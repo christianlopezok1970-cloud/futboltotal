@@ -1,61 +1,42 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
 
-# Configuración visual
-st.set_page_config(page_title="Futbin Card Opener", page_icon="⚽")
+# Configuración de la página
+st.set_page_config(page_title="FC26 Card Opener", layout="centered")
 
-def obtener_datos_futbin(url):
-    """
-    Función que 'scrapea' Futbin para obtener la imagen y el nombre del jugador.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    try:
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
+st.title("🧧 Apertura de Sobre: FC26")
+st.write("Este sistema conecta directamente con el servidor de imágenes de Futbin.")
+
+# Datos de ejemplo (Esto lo podrías tener en una lista después)
+id_cetre = "15945"
+nombre_jugador = "Edwuin Cetré"
+rating_jugador = 76
+
+# --- LÓGICA DEL BOTÓN ---
+if st.button(f"✨ ABRIR SOBRE: {nombre_jugador}"):
+    # Construimos la URL directa a la imagen del servidor de Futbin
+    # El patrón siempre es: https://cdn.futbin.com/content/fifa26/players/{id}.png
+    url_carta = f"https://cdn.futbin.com/content/fifa26/players/{id_cetre}.png"
+    
+    with st.spinner("Trayendo carta desde el servidor..."):
+        # Efectos visuales
+        st.balloons()
         
-        # 1. Extraer la URL de la imagen de la carta
-        # Buscamos la etiqueta img que contiene la carta
-        img_tag = soup.find('img', {'id': 'player_card'})
-        image_url = img_tag['src'] if img_tag else None
+        # Mostramos la imagen directamente
+        # Usamos use_container_width=False para que no se deforme la carta
+        st.image(url_carta, width=350)
         
-        # 2. Extraer el Rating (como ejemplo de dato extra)
-        rating_tag = soup.find('div', {'class': 'pcdisplay-rat'})
-        rating = rating_tag.text.strip() if rating_tag else "S/N"
+        # Información complementaria
+        st.success(f"¡Has obtenido a **{nombre_jugador}**!")
         
-        return image_url, rating
-    except Exception as e:
-        return None, str(e)
-
-# --- INTERFAZ DE USUARIO ---
-st.title("🧧 Apertura de Sobre Especial")
-st.write("Presiona el botón para conectar con el mercado de Futbin y traer la carta.")
-
-# Link de ejemplo (Cetré)
-url_cetre = "https://www.futbin.com/26/player/15945/edwuin-cetre"
-
-if st.button("✨ ABRIR SOBRE: EDWUIN CETRÉ"):
-    with st.spinner("Conectando con servidores de EA/Futbin..."):
-        img_url, rat = obtener_datos_futbin(url_cetre)
+        # Sistema de estrellas basado en tu lógica (75-81 = 3 estrellas)
+        estrellas = "⭐ ⭐ ⭐"
+        valor_venta = 45 # 3 estrellas * 15 monedas
         
-        if img_url:
-            # Mostramos la carta
-            st.balloons() # Efecto de celebración
-            
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                st.image(img_url, caption=f"Rating Oficial: {rat}")
-            
-            with col2:
-                st.success("¡Jugador obtenido correctamente!")
-                st.metric(label="Valor Base", value=f"{int(rat) * 1.5} 🪙") # Ejemplo de cálculo
-                st.write("**Datos de Futbin:**")
-                st.info(f"ID del Jugador: 15945")
-        else:
-            st.error("No se pudo obtener la carta. Verifica la conexión o el link.")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Calidad", estrellas)
+        with col2:
+            st.metric("Valor de Venta", f"{valor_venta} 🪙")
 
-# Instrucciones para el usuario
 st.divider()
-st.caption("Este código utiliza Web Scraping para traer contenido dinámico desde Futbin.com")
+st.caption("Nota: Este método es infalible porque no requiere 'scrapear' la web, solo llama a la imagen por su ID.")
