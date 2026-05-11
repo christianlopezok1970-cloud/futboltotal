@@ -2,90 +2,63 @@ import streamlit as st
 import random
 import time
 
-st.set_page_config(page_title="LPF Chaos Engine", layout="wide")
-
-# --- VARIABLES DE ENTRADA ---
-st.title("🎲 Sandbox Engine: El Producto Edition")
-st.sidebar.header("Variables del Clásico")
-
-mi_club = st.sidebar.text_input("Tu Club", "Estudiantes LP")
-rival_nombre = st.sidebar.text_input("Rival", "Gimnasia LP")
-p_loc_ini = st.sidebar.slider(f"Poder {mi_club}", 100, 1000, 750)
-p_riv_ini = st.sidebar.slider(f"Poder {rival_nombre}", 100, 1000, 720)
-
-if st.button("🏁 INICIAR CAOS"):
-    marcador_spot = st.empty()
-    progreso = st.progress(0)
-    col1, col2 = st.columns([2, 1])
+# --- AJUSTE DE "LA MANO DEL DIOS AZAR" ---
+# Subimos la valla para que no sea un festival de goles constante
+def simular_clásico():
+    st.title("⚽ Sandbox LPF: Calibración Realista")
     
-    with col1: cronica = st.container(height=450)
-    with col2: stats_vivas = st.empty()
-    
-    g_l, g_v = 0, 0
-    p_l, p_r = float(p_loc_ini), float(p_riv_ini)
+    # Sidebar
+    mi_club = st.sidebar.text_input("Tu Club", "Estudiantes LP")
+    rival = st.sidebar.text_input("Rival", "Gimnasia LP")
+    p_l = st.sidebar.slider(f"Poder {mi_club}", 100, 1000, 750)
+    p_r = st.sidebar.slider(f"Poder {rival}", 100, 1000, 720)
 
-    for minuto in range(1, 96): # 90 min + descuento
-        dado = random.randint(1, 1000)
+    if st.button("🏟️ JUGAR PARTIDO"):
+        cronica = st.container(height=400)
+        marcador = st.empty()
+        g_l, g_v = 0, 0
         
-        # --- PAUSAS DINÁMICAS ---
-        if dado > 900: espera = 0.8 # Evento importante
-        elif dado > 700: espera = 0.4 # Algo de acción
-        else: espera = 0.05 # Relleno (vuela)
-        time.sleep(espera)
-        
-        # --- UI UPDATE ---
-        marcador_spot.markdown(f"<h1 style='text-align: center; color: white; background: #222; border-radius: 10px;'>{mi_club} {g_l} — {g_v} {rival_nombre}</h1>", unsafe_allow_html=True)
-        progreso.progress(min(minuto / 90, 1.0))
-        
-        stats_vivas.markdown(f"**Energía {mi_club}:** {int(p_l)}⚡\n\n**Energía {rival_nombre}:** {int(p_r)}⚡")
-
-        # --- LÓGICA DE VARIABLES (EL DADO DE 1000) ---
-        
-        # 1. EL "VAR" O PENAL (Evento raro: 1-15)
-        if dado <= 15:
-            equipo_fav = mi_club if random.random() > 0.5 else rival_nombre
-            cronica.warning(f"📢 {minuto}' - ¡PENAL! El árbitro cobra falta en el área para {equipo_fav}.")
-            time.sleep(1)
-            if random.randint(1, 100) > 20: # 80% de chance de gol
-                if equipo_fav == mi_club: g_l += 1
-                else: g_v += 1
-                cronica.error(f"⚽ {minuto}' - ¡GOL DE PENAL!")
-                st.toast("¡GOL!")
-            else:
-                cronica.info(f"🧤 {minuto}' - ¡LO ATAJÓ! El arquero es héroe.")
-
-        # 2. ACCIÓN DE GOL (Dado 930-1000: más chances)
-        elif dado >= 930:
-            # Duelo de dados (recalibrado para que sea más fácil meter gol)
-            suerte_l = random.randint(1, 400)
-            suerte_v = random.randint(1, 400)
+        for min in range(1, 95):
+            dado = random.randint(1, 1000)
             
-            # El ataque local (p_l) contra defensa rival (p_r)
-            if (p_l + suerte_l) > (p_r + suerte_v + 80): 
-                g_l += 1
-                cronica.error(f"⚽ {minuto}' - ¡GOOOOOL! Gran jugada colectiva de {mi_club}.")
-                st.balloons()
-            elif (p_r + suerte_v) > (p_l + suerte_l + 80):
-                g_v += 1
-                cronica.error(f"💀 {minuto}' - ¡GOL! {rival_nombre} aprovecha un descuido.")
-            else:
-                cronica.write(f"🧤 {minuto}' - ¡UHHHH! El palo salvó al arquero.")
+            # --- TIEMPO DINÁMICO ---
+            # Si pasa algo, frenamos. Si no, vuela.
+            time.sleep(0.5 if dado > 940 else 0.02)
+            
+            # --- EVENTO DE GOL (955-1000: Menos chances que antes) ---
+            if dado > 955: 
+                # Duelo: Poder + Dado de 500 caras
+                # Aumentamos la diferencia necesaria a 120 para que sea gol
+                ataque = p_l + random.randint(1, 500)
+                defensa = p_r + random.randint(1, 500)
+                
+                if ataque > (defensa + 120):
+                    g_l += 1
+                    cronica.error(f"⚽ {min}' - ¡GOOOL! {mi_club} rompe el arco.")
+                elif defensa > (ataque + 120):
+                    g_v += 1
+                    cronica.error(f"💀 {min}' - ¡GOL! Silencio en el estadio, anotó {rival}.")
+                else:
+                    frases_ataje = ["¡La sacó el arquero!", "¡Pegó en el travesaño!", "¡Casi! Se va por un pelo."]
+                    cronica.info(f"🧤 {min}' - {random.choice(frases_ataje)}")
 
-        # 3. LESIÓN O ROJA (Dado 500-510)
-        elif 500 <= dado <= 510:
-            if random.random() > 0.5:
-                cronica.warning(f"🟥 {minuto}' - ¡EXPULSIÓN! {mi_club} se queda con 10.")
-                p_l -= 150 # Golpe duro al poder
-            else:
-                cronica.warning(f"🚑 {minuto}' - ¡Lesión! {rival_nombre} debe hacer un cambio obligado.")
-                p_r -= 80
+            # --- EVENTO DE PENAL (Más raro: 1-5) ---
+            elif dado <= 5:
+                cronica.warning(f"📢 {min}' - ¡PENAL! Tensión absoluta...")
+                time.sleep(1)
+                if random.random() > 0.25: # 75% gol
+                    g_l += 1
+                    cronica.error(f"⚽ {min}' - ¡ADENTRO! No perdonó de penal.")
+                else:
+                    cronica.info(f"🧤 {min}' - ¡LO ERRÓ! La tiró a la tribuna.")
 
-        # 4. RELLENO
-        elif minuto % 15 == 0:
-            cronica.write(f"⏱️ {minuto}' - El partido entra en una meseta.")
+            # --- RELLENO ---
+            elif min % 20 == 0:
+                cronica.write(f"⏱️ {min}' - El partido está muy cerrado en el medio.")
 
-        # --- DESGASTE NATURAL ---
-        p_l -= random.uniform(0.5, 1.2)
-        p_r -= random.uniform(0.5, 1.2)
+            # Actualizar marcador
+            marcador.markdown(f"### {mi_club} {g_l} - {g_v} {rival}")
 
-    st.success(f"Final del partido. Marcador: {g_l} - {g_v}")
+        st.success("🏁 Final del partido.")
+
+simular_clásico()
