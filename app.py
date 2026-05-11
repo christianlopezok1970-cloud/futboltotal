@@ -2,88 +2,58 @@ import streamlit as st
 import random
 import time
 
-# --- CONFIGURACIÓN DE INTERFAZ ---
-st.set_page_config(page_title="Argentina Sandbox Engine", layout="wide")
+st.title("🎲 Sandbox Engine: Minuto a Minuto Realista")
 
-st.title("🎲 Motor de Azar: El Dado de 1000 Caras")
-st.sidebar.header("Configuración del Sandbox")
+# Configuración inicial
+poder_actual = st.sidebar.slider("Poder inicial del equipo", 500, 1000, 750)
+rival_poder = 720
 
-# --- VARIABLES DE ENTRADA ---
-club_local = st.sidebar.text_input("Tu Club", "Estudiantes LP")
-rival = st.sidebar.text_input("Rival", "Gimnasia LP")
-poder_local = st.sidebar.slider("Poder de tu plantel (1-1000)", 100, 1000, 750)
-poder_rival = st.sidebar.slider("Poder del rival (1-1000)", 100, 1000, 720)
-
-# --- EL MOTOR DEL PARTIDO ---
-if st.button("🚀 INICIAR SIMULACIÓN DE PARTIDO"):
-    st.divider()
+if st.button("🎬 INICIAR PARTIDO"):
+    cronica = st.container(height=450)
+    marcador = st.empty()
     
-    col1, col2 = st.columns([2, 1])
+    goles_l, goles_v = 0, 0
     
-    goles_local = 0
-    goles_rival = 0
-    minuto = 0
-    
-    with col1:
-        st.subheader(f"🏟️ Crónica en vivo: {club_local} vs {rival}")
-        contenedor_cronica = st.container(height=400)
+    # Simulación de 90 minutos (paso de 1 en 1 o 5 en 5)
+    for minuto in range(1, 91):
+        time.sleep(0.1) # Velocidad de la simulación
         
-    with col2:
-        st.subheader("📊 Marcador")
-        pizarra = st.empty() # Espacio dinámico para el resultado
-        grafico_azar = st.empty() # Espacio para ver las tiradas del dado
-        historial_dados = []
-
-    # BUCLE DE TIEMPO (Sandbox sim)
-    for t in range(9): # 9 bloques de 10 minutos
-        minuto += 10
-        time.sleep(0.8) # Para darle suspenso
+        # 1. EL DADO DE ACCIÓN (1000 caras)
+        dado = random.randint(1, 1000)
         
-        # EL DADO DE 1000 CARAS RODANDO
-        dado_local = random.randint(1, 1000)
-        dado_rival = random.randint(1, 1000)
+        # 2. EFECTO FATIGA: El poder baja un poquito cada minuto
+        poder_actual -= 0.5 
         
-        # EL "AZAR PURO" (Eventos aleatorios fuera de rating)
-        evento_azar = random.randint(1, 1000)
+        # 3. LÓGICA DE EVENTOS (El "Embudo" de probabilidades)
         
-        # LÓGICA DE EVENTOS
-        msg = ""
-        # 1. Probabilidad de Gol Local
-        # (Rating + Dado) vs (Rating + Dado)
-        if (poder_local + dado_local) > (poder_rival + dado_rival + 400):
-            goles_local += 1
-            msg = f"⚽ **{minuto}' - ¡GOOOL DE {club_local.upper()}!** Una jugada magistral (Dado: {dado_local})"
-        
-        # 2. Probabilidad de Gol Rival
-        elif (poder_rival + dado_rival) > (poder_local + dado_local + 400):
-            goles_rival += 1
-            msg = f"💀 **{minuto}' - Gol de {rival}.** Error defensivo fatal (Dado Rival: {dado_rival})"
+        # RANGO DE NADA: Del 1 al 850 (85% de los minutos no pasa nada)
+        if dado < 850:
+            # Solo mostramos mensaje en minutos clave para no saturar
+            if minuto % 10 == 0:
+                cronica.write(f"⏱️ {minuto}' - Juego trabado en el mediocampo...")
+            continue # Salta al siguiente minuto sin hacer nada
             
-        # 3. El Dado de Crisis (Eventos Extraños)
-        elif evento_azar < 50:
-            msg = f"🟥 {minuto}' - ¡ROJA! El azar decidió que tu central perdió los estribos."
-            poder_local -= 100 # El sandbox se modifica en vivo
+        # RANGO DE PELIGRO: Del 851 al 980 (Aproximaciones)
+        elif 851 <= dado <= 980:
+            if random.random() > 0.5:
+                cronica.write(f"⚠️ {minuto}' - ¡Aviso de {st.session_state.get('club_nombre', 'Local')}! Remate desviado.")
+            else:
+                cronica.write(f"⚠️ {minuto}' - Centro peligroso del rival que despeja la defensa.")
         
-        elif evento_azar > 980:
-            msg = f"🏥 {minuto}' - Lesión fortuita. Se retira tu figura entre lágrimas."
-            poder_local -= 50
-        
+        # RANGO DE GOL: Del 981 al 1000 (Solo el 2% de los minutos son chances claras)
         else:
-            frases_relleno = ["Pelea en el medio campo.", "Pase impreciso.", "Cánticos en la tribuna.", "El técnico da indicaciones."]
-            msg = f"⏱️ {minuto}' - {random.choice(frases_relleno)} (Dados: {dado_local} vs {dado_rival})"
+            # Aquí choca el poder contra el azar
+            ataque = poder_actual + random.randint(1, 200)
+            defensa = rival_poder + random.randint(1, 200)
+            
+            if ataque > defensa:
+                goles_l += 1
+                cronica.write(f"⚽ **{minuto}' - ¡GOOOOOOL!** Jugada magistral de contraataque.")
+                st.balloons()
+            else:
+                cronica.write(f"🧤 {minuto}' - ¡Era el gol! Pero el arquero rival tuvo una reacción heróica.")
 
-        # ACTUALIZAR INTERFAZ
-        contenedor_cronica.write(msg)
-        pizarra.metric("RESULTADO", f"{goles_local} - {goles_rival}")
-        
-        # Visualizar el azar
-        historial_dados.append(dado_local)
-        grafico_azar.line_chart(historial_dados)
+        # Actualizar marcador en tiempo real
+        marcador.metric("MARCADOR", f"{goles_l} - {goles_v}", delta=f"Poder: {int(poder_actual)}")
 
-    # RESULTADO FINAL
-    if goles_local > goles_rival:
-        st.success(f"¡FINAL! {club_local} ganó por la mística del dado.")
-    elif goles_local < goles_rival:
-        st.error(f"¡FINAL! El azar hundió a {club_local}.")
-    else:
-        st.warning("¡FINAL! Empate técnico en el arenero.")
+    st.success(f"Final del partido: {goles_l} - {goles_v}")
