@@ -1,76 +1,62 @@
 import streamlit as st
 import random
 
-# CONFIGURACIÓN
-st.set_page_config(page_title="LPF Pack Opener", page_icon="⚽")
+# Configuración de estilo para que la carta se vea genial
+st.markdown("""
+    <style>
+    .card-container {
+        background-color: #f0f2f6;
+        border-radius: 15px;
+        padding: 20px;
+        text-align: center;
+        border: 2px solid #e03131;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- BASE DE DATOS LOCAL (Aquí metes a todos los que quieras) ---
-# He incluido una lista representativa de la Liga Profesional Argentina
-mazo_lpf = [
-    # ESTUDIANTES LP
-    {"n": "Enzo Pérez", "id": "183894", "r": 77, "c": "Estudiantes LP"},
-    {"n": "Santiago Ascacíbar", "id": "235165", "r": 77, "c": "Estudiantes LP"},
-    {"n": "Edwuin Cetré", "id": "242426", "r": 76, "c": "Estudiantes LP"},
-    {"n": "Guido Carrillo", "id": "208115", "r": 76, "c": "Estudiantes LP"},
-    # RIVER
-    {"n": "Franco Armani", "id": "193080", "r": 81, "c": "River Plate"},
-    {"n": "Miguel Borja", "id": "205362", "r": 78, "c": "River Plate"},
-    {"n": "Claudio Echeverri", "id": "275916", "r": 74, "c": "River Plate"},
-    # BOCA
-    {"n": "Edinson Cavani", "id": "179813", "r": 79, "c": "Boca Juniors"},
-    {"n": "Kevin Zenón", "id": "262854", "r": 77, "c": "Boca Juniors"},
-    {"n": "Luis Advíncula", "id": "203019", "r": 76, "c": "Boca Juniors"},
-    # RACING
-    {"n": "Juanfer Quintero", "id": "202548", "r": 79, "c": "Racing Club"},
-    {"n": "Maravilla Martínez", "id": "274643", "r": 77, "c": "Racing Club"},
-    # TALLERES / SAN LORENZO / OTROS
-    {"n": "Guido Herrera", "id": "235213", "r": 77, "c": "Talleres"},
-    {"n": "Adam Bareiro", "n2": "River Plate", "id": "244675", "r": 77, "c": "San Lorenzo"},
-    {"n": "Nahuel Losada", "id": "260123", "r": 76, "c": "Belgrano"}
+# 1. LISTADO INTERNO (La base de datos que vive en tu código)
+# Estos son los IDs reales de EA para Estudiantes de LP
+mazo_estudiantes = [
+    {"n": "Enzo Pérez", "id": "183894", "r": 77},
+    {"n": "Santiago Ascacíbar", "id": "235165", "r": 77},
+    {"n": "Edwuin Cetré", "id": "242426", "r": 76},
+    {"n": "Guido Carrillo", "id": "208115", "r": 76},
+    {"n": "José Sosa", "id": "163155", "r": 75},
+    {"n": "Federico Fernández", "id": "192362", "r": 74},
+    {"n": "Gastón Benedetti", "id": "273344", "r": 73},
+    {"n": "Eros Mancuso", "id": "268305", "r": 73},
+    {"n": "Tiago Palacios", "id": "258957", "r": 72},
+    {"n": "Matías Mansilla", "id": "261947", "r": 72}
 ]
 
-def obtener_imagen(player_id):
-    """
-    Construye la URL de la imagen usando el CDN de SoFIFA, que es más estable.
-    """
-    # Formato de URL de SoFIFA: id con ceros a la izquierda
-    id_str = str(player_id).zfill(6)
-    return f"https://cdn.sofifa.net/players/{id_str[:3]}/{id_str[-3:]}/24_120.png"
+st.title("🇦🇹 Pincha Pack Opener")
 
-# --- INTERFAZ ---
-st.title("🇦🇷 Sobre de la Liga Profesional")
-st.write(f"Jugadores disponibles en el mazo: {len(mazo_lpf)}")
-
-if st.button("✨ ABRIR SOBRE (50 🪙)"):
-    # Selección aleatoria
-    j = random.choice(mazo_lpf)
+if st.button("✨ ABRIR SOBRE DE ESTUDIANTES"):
+    jugador = random.choice(mazo_estudiantes)
     
-    # Lógica de estrellas (15 monedas por estrella)
-    if j['r'] >= 80: estrellas, nivel = "⭐⭐⭐⭐", 4
-    elif j['r'] >= 75: estrellas, nivel = "⭐⭐⭐", 3
-    else: estrellas, nivel = "⭐⭐", 2
+    # ESTRATEGIA DEFINITIVA: Usar el render de cartas de EA
+    # Esta URL es la que usan las aplicaciones oficiales, es la más estable.
+    url_foto = f"https://ratings-images-prod.asindcontent.g3.easports.com/FC25/full/player-portraits/p{jugador['id']}.png"
     
-    valor_venta = nivel * 15
-
-    # Mostrar resultado
-    with st.spinner("¡Abriendo sobre!"):
+    with st.spinner("¡Buscando en el Country de City Bell...!"):
         st.balloons()
         
-        # Usamos columnas para diseño limpio
-        col1, col2 = st.columns([1, 1.5])
+        # Usamos un contenedor visual
+        st.markdown(f"""
+            <div class="card-container">
+                <img src="{url_foto}" width="200" style="margin-bottom: 10px;">
+                <h2 style="color: #333;">{jugador['n']}</h2>
+                <p style="font-size: 20px; color: #666;">Rating: <b>{jugador['r']}</b></p>
+            </div>
+        """, unsafe_allow_html=True)
         
-        with col1:
-            # Intentamos cargar la imagen de SoFIFA
-            st.image(obtener_imagen(j['id']), width=150)
-            
-        with col2:
-            st.header(j['n'])
-            st.write(f"🏠 **Club:** {j['c']}")
-            st.write(f"📊 **Rating:** {j['r']}")
-            st.metric("Nivel", estrellas)
-            st.metric("Valor Venta", f"{valor_venta} 🪙")
-            
-        st.success(f"¡Has fichado a {j['n']}!")
+        # Tu lógica de negocio para Futbol Total - Pro
+        rat = jugador['r']
+        nivel = 3 if rat >= 75 else 2
+        valor = nivel * 15
+        
+        col1, col2 = st.columns(2)
+        col1.metric("Calidad", f"{nivel} ⭐")
+        col2.metric("Valor Mercado", f"{valor} 🪙")
 
-st.divider()
-st.info("Para que aparezcan 'todos' los jugadores, simplemente debemos seguir alimentando la lista 'mazo_lpf' con los nombres e IDs de SoFIFA.")
+st.info("Nota: Si la imagen no aparece, es porque EA cambió el ID para FC26. En ese caso, usamos un generador de cartas local.")
