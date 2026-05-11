@@ -1,65 +1,92 @@
 import streamlit as st
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 import random
 
-# --- 1. BASE DE DATOS LOCAL (El listado que "vive" en el código) ---
-# Aquí puedes meter cientos de jugadores siguiendo este formato.
-# Los IDs son los que aparecen en la URL de Futbin.
-lista_estudiantes = [
-    {"nombre": "Enzo Pérez", "id": "183894", "rat": 77},
-    {"nombre": "Santiago Ascacíbar", "id": "235165", "rat": 77},
-    {"nombre": "Guido Carrillo", "id": "208115", "rat": 76},
-    {"nombre": "Edwuin Cetré", "id": "242426", "rat": 76},
-    {"nombre": "José Sosa", "id": "163155", "rat": 75},
-    {"nombre": "Federico Fernández", "id": "192362", "rat": 74},
-    {"nombre": "Luciano Lollo", "id": "192361", "rat": 73},
-    {"nombre": "Gastón Benedetti", "id": "273344", "rat": 73},
-    {"nombre": "Eros Mancuso", "id": "268305", "rat": 73},
-    {"nombre": "Tiago Palacios", "id": "258957", "rat": 72},
-    {"nombre": "Matías Mansilla", "id": "261947", "rat": 72},
-    {"nombre": "Javier Correa", "id": "222452", "rat": 74}
-]
+# Configuración
+st.set_page_config(page_title="SoFIFA LPF Pack Opener", layout="centered")
 
-# --- 2. FUNCIÓN PARA MOSTRAR LA CARTA (TRUCO ANTIBLOQUEO) ---
-def mostrar_carta(player_id):
-    # Usamos una URL de servidor de imágenes que suele tener menos bloqueos
-    # o el CDN directo.
-    url = f"https://www.futbin.com/content/fifa26/players/{player_id}.png"
+def obtener_mazo_lpf():
+    """
+    Entra a SoFIFA y extrae la lista completa de jugadores de la liga argentina.
+    """
+    url = "https://sofifa.com/league/353"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+    }
     
-    # Este HTML ayuda a que el navegador cargue la imagen ignorando algunas restricciones
-    st.markdown(
-        f"""
-        <div style="display: flex; justify-content: center;">
-            <img src="{url}" width="300" style="filter: drop-shadow(0px 10px 15px rgba(0,0,0,0.5));">
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+    try:
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        jugadores = []
+        # Buscamos la tabla de jugadores
+        table = soup.find('table', {'class': 'table-hover'})
+        rows = table.find_all('tr')[1:] # Saltamos el encabezado
+        
+        for row in rows:
+            cols = row.find_all('td')
+            if len(cols) > 1:
+                # Extraer datos
+                nombre_tag = cols[1].find('a', {'data-tooltip': True})
+                nombre = nombre_tag.text if nombre_tag else "Jugador Desconocido"
+                
+                id_jugador = cols[1].find('img')['id'] if cols[1].find('img') else ""
+                
+                rating = int(cols[2].find('span').text) if cols[2].find('span') else 0
+                
+                club = cols[1].find('div', {'class': 'sub'}).find('a').text if cols[1].find('div', {'class': 'sub'}) else "Sin Club"
+                
+                jugadores.append({
+                    "nombre": nombre,
+                    "id": id_jugador,
+                    "rating": rating,
+                    "club": club
+                })
+        return jugadores
+    except Exception as e:
+        st.error(f"Error al conectar con SoFIFA: {e}")
+        return []
 
-# --- 3. INTERFAZ ---
-st.title("🇦🇹 Pack Opener: Estudiantes LP")
+# --- INTERFAZ ---
+st.title("🇦🇷 Sobre Infinito: Liga Profesional")
+st.write("Datos sincronizados en tiempo real con SoFIFA")
 
-if st.button("🧧 ABRIR SOBRE (50 🪙)"):
-    # Elegir al azar de la lista interna
-    jugador = random.choice(lista_estudiantes)
-    
-    # Procesar lógica de niveles (15 monedas por estrella)
-    # Ejemplo: 75+ = 3 estrellas (45 coins), 80+ = 4 estrellas (60 coins)
-    if jugador['rat'] >= 80: estrellas, nivel = "⭐⭐⭐⭐", 4
-    elif jugador['rat'] >= 75: estrellas, nivel = "⭐⭐⭐", 3
-    else: estrellas, nivel = "⭐⭐", 2
-    
-    valor_venta = nivel * 15
-    
-    # Mostrar resultados
-    with st.spinner("¡Cargando carta...!"):
-        st.balloons()
-        mostrar_carta(jugador['id'])
+if st.button("✨ ABRIR SOBRE DE LA LIGA (50 🪙)"):
+    with st.spinner("Buscando en la base de datos de la AFA..."):
+        mazo = obtener_mazo_lpf()
         
-        st.markdown(f"<h2 style='text-align: center;'>{jugador['nombre']}</h2>", unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        col1.metric("Rating", jugador['rat'])
-        col1.write(f"Calidad: {estrellas}")
-        
-        col2.metric("Valor Mercado", f"{valor_venta} 🪙")
-        col2.info(f"Nivel de carta: {nivel}")
+        if mazo:
+            jugador = random.choice(mazo)
+            
+            # Construir la URL de la imagen de SoFIFA
+            # El patrón de SoFIFA es: https://cdn.sofifa.net/players/{id_corto}/{id_largo}/24_120.png
+            # Para simplificar, usaremos un placeholder de carta si la imagen falla
+            id_limpio = jugador['id'].zfill(6)
+            url_foto = f"https://cdn.sofifa.net/players/{id_limpio[:3]}/{id_limpio[-3:]}/24_120.png"
+            
+            st.balloons()
+            
+            # Mostrar la carta
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                # Intentamos mostrar la foto del jugador
+                st.image(url_foto, width=150, caption=jugador['nombre'])
+            
+            with col2:
+                st.subheader(jugador['nombre'])
+                st.write(f"🏠 **Club:** {jugador['club']}")
+                st.write(f"📊 **Rating:** {jugador['rating']}")
+                
+                # Tu lógica de niveles
+                rat = jugador['rating']
+                if rat >= 80: estrellas, nivel = "⭐⭐⭐⭐", 4
+                elif rat >= 75: estrellas, nivel = "⭐⭐⭐", 3
+                else: estrellas, nivel = "⭐⭐", 2
+                
+                st.metric("Nivel", estrellas)
+                st.metric("Valor Venta", f"{nivel * 15} 🪙")
+        else:
+            st.warning("No se pudo cargar el mazo. Intenta de nuevo.")
